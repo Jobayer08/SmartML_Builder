@@ -7,6 +7,10 @@ import os
 import shutil
 from netCDF4 import Dataset
 
+from app.preprocessing import auto_feature_engineering, auto_split
+from fastapi import Form
+
+
 app = FastAPI()
 
 UPLOAD_DIR = "data/uploads"
@@ -131,3 +135,57 @@ async def upload_dataset(file: UploadFile = File(...)):
             status_code=400,
             detail="Only CSV, ZIP, JPG, PNG, or NC4 files are supported"
         )
+    
+
+@app.post("/feature-engineering/")
+async def feature_engineering(
+    target_column: str = Form(...),
+    file: UploadFile = File(...)
+):
+    filename = file.filename.lower()
+
+    # CSV direct
+    if filename.endswith(".csv"):
+        contents = await file.read()
+        df = pd.read_csv(StringIO(contents.decode("utf-8")))
+
+    # ZIP containing CSV
+    elif filename.endswith(".zip"):
+        zip_path = os.path.join(UPLOAD_DIR, file.filename)
+
+        with open(zip_path, "wb") as f:
+            f.write(await file.read())
+
+        shutil.rmtree(EXTRACT_DIR, ignore_errors=True)
+        os.makedirs(EXTRACT_DIR, exist_ok=True)
+
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(EXTRACT_DIR)
+
+        csv_file = None
+        for root, _, files in os.walk(EXTRACT_DIR):
+            for name in files:
+                if name.lower().endswith(".csv"):
+                    csv_file = os.path.join(root, name)
+                    break
+
+        if csv_file is None:
+            raise HTTPException(status_code=400, detail="No CSV found inside ZIP")
+
+        df = pd.read_csv(csv_file)
+
+    else:
+        raise HTTPException(status_code=400, detail="Only CSV or ZIP allowed")
+
+    # Apply feature engineering
+    processed_df = auto_feature_engineering(df)
+
+    X_train, X_test, y_train, y_test = auto_split(processed_df, target_column)
+
+    return {
+        "processed_shape": processed_df.shape,
+        "train_rows": len(X_train),
+        "test_rows": len(X_test),
+        "columns_after_processing": list(processed_df.columns)
+    }
+
