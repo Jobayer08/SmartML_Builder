@@ -1,0 +1,140 @@
+from netCDF4 import Dataset
+import numpy as np
+
+
+def analyze_nc4(file_path, target_variable=None):
+
+    # =============================
+    # Open NetCDF dataset
+    # =============================
+    data = Dataset(file_path, "r")
+
+    variables = list(data.variables.keys())
+    dimensions = list(data.dimensions.keys())
+
+    # =============================
+    # Step 1 — Determine Target Variable
+    # =============================
+    var_name = None
+
+    # User provided variable
+    if target_variable:
+
+        if target_variable not in variables:
+
+            data.close()
+
+            return {
+                "error": f"'{target_variable}' not found in dataset",
+                "available_variables": variables
+            }
+
+        var_name = target_variable
+
+    else:
+        # =============================
+        # Auto detect usable variable
+        # =============================
+        for v in variables:
+
+            try:
+
+                values = data.variables[v][:]
+
+                values = np.array(values)
+
+                # Skip empty variables
+                if values.size == 0:
+                    continue
+
+                # Skip all NaN variables
+                if np.isnan(values).all():
+                    continue
+
+                var_name = v
+                break
+
+            except:
+                continue
+
+    # =============================
+    # If no usable variable found
+    # =============================
+    if var_name is None:
+
+        data.close()
+
+        return {
+            "error": "No valid variable found in NC4 file",
+            "available_variables": variables
+        }
+
+    # =============================
+    # Step 2 — Extract Variable Data
+    # =============================
+    try:
+
+        values = data.variables[var_name][:]
+
+        values = np.array(values)
+
+        # Flatten multi-dimensional data
+        values = values.flatten()
+
+        # Remove NaN values
+        values = values[~np.isnan(values)]
+
+    except Exception as e:
+
+        data.close()
+
+        return {
+            "error": f"Failed to read variable '{var_name}'",
+            "details": str(e)
+        }
+
+    # =============================
+    # If dataset empty after cleaning
+    # =============================
+    if len(values) == 0:
+
+        data.close()
+
+        return {
+            "error": "Variable contains no usable numeric data",
+            "target_variable": var_name
+        }
+
+    # =============================
+    # Step 3 — Compute Statistics
+    # =============================
+    mean_val = float(np.mean(values))
+    std_val = float(np.std(values))
+    min_val = float(np.min(values))
+    max_val = float(np.max(values))
+
+    # Close dataset
+    data.close()
+
+    # =============================
+    # Step 4 — Return Results
+    # =============================
+    return {
+
+        "dataset_type": "nc4_scientific",
+
+        "target_variable": var_name,
+
+        "all_variables": variables,
+
+        "dimensions": dimensions,
+
+        "data_points": int(len(values)),
+
+        "statistics": {
+            "mean": mean_val,
+            "std": std_val,
+            "min": min_val,
+            "max": max_val
+        }
+    }

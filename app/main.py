@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 import pandas as pd
 from io import StringIO
 import numpy as np
@@ -8,8 +8,11 @@ import shutil
 from netCDF4 import Dataset
 
 from app.preprocessing import auto_feature_engineering, auto_split
-from fastapi import Form
+from app.ml_engine import train_models
 
+from app.image_engine import train_labeled_images
+from app.clustering_engine import cluster_images
+from app.nc4_engine import analyze_nc4
 
 app = FastAPI()
 
@@ -18,21 +21,50 @@ EXTRACT_DIR = "data/extracted"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
 @app.get("/")
 async def root():
-    return {"status": "SmartML Builder Step 1 Running"}
+    return {"status": "SmartML Builder Running"}
 
+
+# ==============================
+# DATASET DETECTION ENGINE
+# ==============================
+def detect_dataset(csv_files, image_files, nc4_files):
+
+    if nc4_files:
+        return "nc4"
+
+    if image_files:
+
+        folders = set()
+
+        for path in image_files:
+            folders.add(os.path.dirname(path))
+
+        if len(folders) > 1:
+            return "image_labeled"
+        else:
+            return "image_unlabeled"
+
+    if csv_files:
+      return "csv"
+
+    return "unknown"
+
+
+# ====================================
+# STEP 1 — DATASET UPLOAD
+# ====================================
 @app.post("/upload-dataset/")
 async def upload_dataset(file: UploadFile = File(...)):
 
     filename = file.filename.lower()
 
-    # =========================
-    # CASE 1 — CSV Upload
-    # =========================
     if filename.endswith(".csv"):
+
         contents = await file.read()
-        df = pd.read_csv(StringIO(contents.decode("utf-8")))
+        df = pd.read_csv(StringIO(contents.decode("utf-8")), low_memory=False)
 
         df = df.drop_duplicates()
         df = df.ffill()
@@ -48,10 +80,8 @@ async def upload_dataset(file: UploadFile = File(...)):
             "summary": summary
         }
 
-    # =========================
-    # CASE 2 — ZIP Upload
-    # =========================
     elif filename.endswith(".zip"):
+
         zip_path = os.path.join(UPLOAD_DIR, file.filename)
 
         with open(zip_path, "wb") as f:
@@ -67,9 +97,9 @@ async def upload_dataset(file: UploadFile = File(...)):
         image_files = []
         nc4_files = []
 
-        # Scan nested folders
         for root, _, files in os.walk(EXTRACT_DIR):
             for name in files:
+
                 path = os.path.join(root, name)
 
                 if name.lower().endswith(".csv"):
@@ -81,76 +111,110 @@ async def upload_dataset(file: UploadFile = File(...)):
                 elif name.lower().endswith(".nc4"):
                     nc4_files.append(path)
 
+        dataset_type = detect_dataset(csv_files, image_files, nc4_files)
+
         result = {
-            "dataset_type": "ZIP",
-            "csv_files_found": len(csv_files),
-            "image_files_found": len(image_files),
-            "nc4_files_found": len(nc4_files),
-            "sample_images": image_files[:5],
-            "sample_nc4": nc4_files[:3]
+            "dataset_type": dataset_type,
+            "csv_files": len(csv_files),
+            "images": len(image_files),
+            "nc4_files": len(nc4_files)
         }
 
-        # -------------------
-        # Process CSV if exists
-        # -------------------
-        if csv_files:
-            df = pd.read_csv(csv_files[0])
-            df = df.drop_duplicates()
-            df = df.ffill()
-
-            preview = df.head(5).replace({np.nan: None}).to_dict()
-            summary = df.describe(include="all").replace({np.nan: None}).to_dict()
-
-            result["rows"] = int(len(df))
-            result["columns"] = list(df.columns)
-            result["preview"] = preview
-            result["summary"] = summary
-
-        # -------------------
-        # Process NC4 if exists
-        # -------------------
         if nc4_files:
-            sample_nc4 = nc4_files[0]
 
-            nc_data = Dataset(sample_nc4, "r")
-
+            nc_data = Dataset(nc4_files[0])
             variables = list(nc_data.variables.keys())
-            dimensions = list(nc_data.dimensions.keys())
-
-            result["nc4_metadata"] = {
-                "variables": variables[:15],
-                "dimensions": dimensions,
-                "file_sample": os.path.basename(sample_nc4)
-            }
-
             nc_data.close()
+
+            result["nc4_variables"] = variables
 
         return result
 
-    # =========================
-    # Unsupported File
-    # =========================
     else:
         raise HTTPException(
             status_code=400,
-            detail="Only CSV, ZIP, JPG, PNG, or NC4 files are supported"
+            detail="Only CSV or ZIP files supported"
         )
-    
 
+
+# ====================================
+# STEP 2 — FEATURE ENGINEERING
+# ====================================
 @app.post("/feature-engineering/")
 async def feature_engineering(
     target_column: str = Form(...),
     file: UploadFile = File(...)
 ):
+
+    contents = await file.read()
+
+    df = pd.read_csv(
+        StringIO(contents.decode("utf-8")),
+        low_memory=False
+    )
+
+    X, y = auto_feature_engineering(df, target_column)
+
+    X_train, X_test, y_train, y_test = auto_split(X, y)
+
+    return {
+        "features": list(X.columns),
+        "feature_count": len(X.columns),
+        "train_rows": len(X_train),
+        "test_rows": len(X_test)
+    }
+
+
+# ====================================
+# STEP 3 — MODEL TRAINING
+# ====================================
+@app.post("/train-model/")
+async def train_model(
+    file: UploadFile = File(...),
+    target_column: str = Form(None)
+):
+
     filename = file.filename.lower()
 
-    # CSV direct
+    # =========================
+    # CSV TRAINING
+    # =========================
     if filename.endswith(".csv"):
-        contents = await file.read()
-        df = pd.read_csv(StringIO(contents.decode("utf-8")))
 
-    # ZIP containing CSV
+        if not target_column:
+            raise HTTPException(400, "target_column required")
+
+        contents = await file.read()
+
+        df = pd.read_csv(
+            StringIO(contents.decode("utf-8")),
+            low_memory=False
+        )
+
+        X, y = auto_feature_engineering(df, target_column)
+
+        X_train, X_test, y_train, y_test = auto_split(
+            X, y
+        )
+
+        result = train_models(
+            X_train,
+            X_test,
+            y_train,
+            y_test
+        )
+
+        return {
+            "dataset_type": "csv",
+            "target": target_column,
+            "training_result": result
+        }
+
+    # =========================
+    # ZIP DATASET
+    # =========================
     elif filename.endswith(".zip"):
+
         zip_path = os.path.join(UPLOAD_DIR, file.filename)
 
         with open(zip_path, "wb") as f:
@@ -162,30 +226,76 @@ async def feature_engineering(
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(EXTRACT_DIR)
 
-        csv_file = None
+        csv_files = []
+        image_files = []
+        nc4_files = []
+
         for root, _, files in os.walk(EXTRACT_DIR):
+
             for name in files:
-                if name.lower().endswith(".csv"):
-                    csv_file = os.path.join(root, name)
-                    break
 
-        if csv_file is None:
-            raise HTTPException(status_code=400, detail="No CSV found inside ZIP")
+                path = os.path.join(root, name)
 
-        df = pd.read_csv(csv_file)
+                if name.endswith(".csv"):
+                    csv_files.append(path)
+
+                elif name.lower().endswith((".jpg", ".png", ".jpeg")):
+                    image_files.append(path)
+
+                elif name.endswith(".nc4"):
+                    nc4_files.append(path)
+
+        dataset_type = detect_dataset(
+            csv_files,
+            image_files,
+            nc4_files
+        )
+
+        # =====================
+        # IMAGE CLASSIFICATION
+        # =====================
+        if dataset_type == "image_labeled":
+
+            path = EXTRACT_DIR
+
+            result = train_labeled_images(path)
+
+            return {
+                "dataset_type": dataset_type,
+                "result": result
+            }
+
+        # =====================
+        # IMAGE CLUSTERING
+        # =====================
+        if dataset_type == "image_unlabeled":
+
+            path = EXTRACT_DIR
+
+            result = cluster_images(path)
+
+            return {
+                "dataset_type": dataset_type,
+                "result": result
+            }
+
+        # =====================
+        # NC4 DATASET
+        # =====================
+        if dataset_type == "nc4":
+
+            result = analyze_nc4(nc4_files[0], target_column)
+
+            return {
+                "dataset_type": dataset_type,
+                "result": result
+            }
+
+        return {"dataset_type": "unknown"}
 
     else:
-        raise HTTPException(status_code=400, detail="Only CSV or ZIP allowed")
 
-    # Apply feature engineering
-    processed_df = auto_feature_engineering(df)
-
-    X_train, X_test, y_train, y_test = auto_split(processed_df, target_column)
-
-    return {
-        "processed_shape": processed_df.shape,
-        "train_rows": len(X_train),
-        "test_rows": len(X_test),
-        "columns_after_processing": list(processed_df.columns)
-    }
-
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file format"
+        )
