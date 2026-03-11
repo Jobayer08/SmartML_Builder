@@ -7,6 +7,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.cluster import KMeans
+import joblib
+
+
+# -----------------------------
+# Model save directory
+# -----------------------------
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 # -----------------------------
@@ -60,11 +68,22 @@ def train_labeled_images(dataset_path):
             loss.backward()
             optimizer.step()
 
+    # -----------------------------
+    # Save trained image model
+    # -----------------------------
+    model_path = os.path.join(MODEL_DIR, "image_classifier.pth")
+
+    torch.save({
+        "model_state_dict": model.state_dict(),
+        "classes": dataset.classes
+    }, model_path)
+
     return {
         "task": "image_classification",
         "classes": dataset.classes,
         "total_images": len(dataset),
-        "status": "Image model trained"
+        "model_saved": model_path,
+        "status": "Image model trained and saved"
     }
 
 
@@ -96,11 +115,19 @@ def cluster_unlabeled_images(folder):
     kmeans = KMeans(n_clusters=3)
     kmeans.fit(features)
 
+    # -----------------------------
+    # Save clustering model
+    # -----------------------------
+    model_path = os.path.join(MODEL_DIR, "image_cluster_model.pkl")
+
+    joblib.dump(kmeans, model_path)
+
     return {
         "task": "image_clustering",
         "clusters": 3,
         "total_images": image_count,
-        "status": "Images clustered"
+        "model_saved": model_path,
+        "status": "Images clustered and model saved"
     }
 
 

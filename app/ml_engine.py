@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import joblib
+import os
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -15,6 +17,10 @@ from sklearn.metrics import (
 )
 
 from sklearn.preprocessing import LabelEncoder
+
+
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 # =========================
@@ -50,6 +56,34 @@ def prepare_data(df, target):
         y = encoder.fit_transform(y)
 
     return X, y
+
+
+# =========================
+# Hyperparameter Optimization
+# =========================
+def optimize_model(model, X_train, y_train, problem_type):
+
+    if problem_type == "classification":
+
+        param_grid = {
+            "n_estimators": [50, 100],
+            "max_depth": [5, 10, None]
+        }
+
+        if isinstance(model, RandomForestClassifier):
+
+            grid = GridSearchCV(
+                model,
+                param_grid,
+                cv=3,
+                scoring="accuracy"
+            )
+
+            grid.fit(X_train, y_train)
+
+            return grid.best_estimator_, grid.best_params_
+
+    return model, {}
 
 
 # =========================
@@ -91,7 +125,8 @@ def train_models(X_train, X_test, y_train, y_test):
 
             trained_models[name] = model
 
-        best_model = max(results, key=lambda x: results[x]["accuracy"])
+        best_model_name = max(results, key=lambda x: results[x]["accuracy"])
+        best_model = trained_models[best_model_name]
 
     # =========================
     # Regression Models
@@ -116,13 +151,34 @@ def train_models(X_train, X_test, y_train, y_test):
 
             trained_models[name] = model
 
-        best_model = min(results, key=lambda x: results[x]["RMSE"])
+        best_model_name = min(results, key=lambda x: results[x]["RMSE"])
+        best_model = trained_models[best_model_name]
+
+    # =========================
+    # Optimization
+    # =========================
+    optimized_model, best_params = optimize_model(
+        best_model,
+        X_train,
+        y_train,
+        problem_type
+    )
+
+    # =========================
+    # Save Model
+    # =========================
+    model_path = os.path.join(MODEL_DIR, "best_csv_model.pkl")
+
+    joblib.dump(optimized_model, model_path)
 
     return {
         "problem_type": problem_type,
         "model_results": results,
-        "best_model": best_model,
-    
+        "best_model": best_model_name,
+        "optimization": {
+            "best_params": best_params,
+            "model_saved_path": model_path
+        }
     }
 
 

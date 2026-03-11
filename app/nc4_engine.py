@@ -1,5 +1,14 @@
 from netCDF4 import Dataset
 import numpy as np
+import joblib
+import os
+
+
+# =============================
+# Model directory
+# =============================
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 def analyze_nc4(file_path, target_variable=None):
@@ -113,11 +122,26 @@ def analyze_nc4(file_path, target_variable=None):
     min_val = float(np.min(values))
     max_val = float(np.max(values))
 
+    # =============================
+    # Step 4 — Save "Model"
+    # =============================
+    model_data = {
+        "target_variable": var_name,
+        "mean": mean_val,
+        "std": std_val,
+        "min": min_val,
+        "max": max_val
+    }
+
+    model_path = os.path.join(MODEL_DIR, "nc4_model.pkl")
+
+    joblib.dump(model_data, model_path)
+
     # Close dataset
     data.close()
 
     # =============================
-    # Step 4 — Return Results
+    # Step 5 — Return Results
     # =============================
     return {
 
@@ -136,5 +160,7 @@ def analyze_nc4(file_path, target_variable=None):
             "std": std_val,
             "min": min_val,
             "max": max_val
-        }
+        },
+
+        "model_saved": model_path
     }
