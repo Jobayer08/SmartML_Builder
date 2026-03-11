@@ -2,6 +2,7 @@ from netCDF4 import Dataset
 import numpy as np
 import joblib
 import os
+import json
 
 
 # =============================
@@ -11,7 +12,7 @@ MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-def analyze_nc4(file_path, target_variable=None):
+def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
 
     # =============================
     # Open NetCDF dataset
@@ -41,9 +42,7 @@ def analyze_nc4(file_path, target_variable=None):
         var_name = target_variable
 
     else:
-        # =============================
         # Auto detect usable variable
-        # =============================
         for v in variables:
 
             try:
@@ -52,11 +51,9 @@ def analyze_nc4(file_path, target_variable=None):
 
                 values = np.array(values)
 
-                # Skip empty variables
                 if values.size == 0:
                     continue
 
-                # Skip all NaN variables
                 if np.isnan(values).all():
                     continue
 
@@ -87,10 +84,8 @@ def analyze_nc4(file_path, target_variable=None):
 
         values = np.array(values)
 
-        # Flatten multi-dimensional data
         values = values.flatten()
 
-        # Remove NaN values
         values = values[~np.isnan(values)]
 
     except Exception as e:
@@ -102,9 +97,6 @@ def analyze_nc4(file_path, target_variable=None):
             "details": str(e)
         }
 
-    # =============================
-    # If dataset empty after cleaning
-    # =============================
     if len(values) == 0:
 
         data.close()
@@ -123,7 +115,7 @@ def analyze_nc4(file_path, target_variable=None):
     max_val = float(np.max(values))
 
     # =============================
-    # Step 4 — Save "Model"
+    # Step 4 — Save Model
     # =============================
     model_data = {
         "target_variable": var_name,
@@ -133,11 +125,26 @@ def analyze_nc4(file_path, target_variable=None):
         "max": max_val
     }
 
-    model_path = os.path.join(MODEL_DIR, "nc4_model.pkl")
+    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
 
     joblib.dump(model_data, model_path)
 
-    # Close dataset
+    # =============================
+    # Save Metadata (important for multi-model)
+    # =============================
+    metadata = {
+        "model_name": model_name,
+        "dataset_type": "nc4",
+        "target_variable": var_name,
+        "variables": variables,
+        "dimensions": dimensions
+    }
+
+    meta_path = os.path.join(MODEL_DIR, f"{model_name}_meta.json")
+
+    with open(meta_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+
     data.close()
 
     # =============================
@@ -146,6 +153,8 @@ def analyze_nc4(file_path, target_variable=None):
     return {
 
         "dataset_type": "nc4_scientific",
+
+        "model_name": model_name,
 
         "target_variable": var_name,
 
@@ -162,5 +171,7 @@ def analyze_nc4(file_path, target_variable=None):
             "max": max_val
         },
 
-        "model_saved": model_path
+        "model_saved": model_path,
+
+        "metadata_saved": meta_path
     }

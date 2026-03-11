@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import joblib
 import os
+import json
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 
@@ -34,6 +35,28 @@ def detect_problem_type(y):
         return "classification"
     else:
         return "regression"
+
+
+# =========================
+# Save Model + Metadata
+# =========================
+def save_model_with_metadata(model, features, target, model_name):
+
+    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
+    meta_path = os.path.join(MODEL_DIR, f"{model_name}_meta.json")
+
+    joblib.dump(model, model_path)
+
+    metadata = {
+        "model_name": model_name,
+        "features": features,
+        "target": target
+    }
+
+    with open(meta_path, "w") as f:
+        json.dump(metadata, f)
+
+    return model_path
 
 
 # =========================
@@ -89,7 +112,7 @@ def optimize_model(model, X_train, y_train, problem_type):
 # =========================
 # Train ML Models
 # =========================
-def train_models(X_train, X_test, y_train, y_test):
+def train_models(X_train, X_test, y_train, y_test, features, target):
 
     problem_type = detect_problem_type(y_train)
 
@@ -165,11 +188,19 @@ def train_models(X_train, X_test, y_train, y_test):
     )
 
     # =========================
-    # Save Model
+    # Generate Model Name
     # =========================
-    model_path = os.path.join(MODEL_DIR, "best_csv_model.pkl")
+    model_name = f"csv_model_{target}"
 
-    joblib.dump(optimized_model, model_path)
+    # =========================
+    # Save Model + Metadata
+    # =========================
+    model_path = save_model_with_metadata(
+        optimized_model,
+        features,
+        target,
+        model_name
+    )
 
     return {
         "problem_type": problem_type,
@@ -189,6 +220,8 @@ def train_csv_model(df, target):
 
     X, y = prepare_data(df, target)
 
+    features = X.columns.tolist()
+
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -200,7 +233,9 @@ def train_csv_model(df, target):
         X_train,
         X_test,
         y_train,
-        y_test
+        y_test,
+        features,
+        target
     )
 
     return results

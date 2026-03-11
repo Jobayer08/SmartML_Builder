@@ -1,11 +1,14 @@
 import os
 import numpy as np
 from PIL import Image
+
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 from sklearn.cluster import KMeans
 import joblib
 
@@ -18,7 +21,7 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 # -----------------------------
-# Check dataset type
+# Detect dataset type
 # -----------------------------
 def detect_image_dataset_type(dataset_path):
 
@@ -36,7 +39,7 @@ def detect_image_dataset_type(dataset_path):
 # -----------------------------
 # Train labeled image dataset
 # -----------------------------
-def train_labeled_images(dataset_path):
+def train_labeled_images(dataset_path, model_name="image_classifier"):
 
     transform = transforms.Compose([
         transforms.Resize((64,64)),
@@ -57,6 +60,8 @@ def train_labeled_images(dataset_path):
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    model.train()
+
     for epoch in range(2):
 
         for images, labels in loader:
@@ -71,7 +76,7 @@ def train_labeled_images(dataset_path):
     # -----------------------------
     # Save trained image model
     # -----------------------------
-    model_path = os.path.join(MODEL_DIR, "image_classifier.pth")
+    model_path = os.path.join(MODEL_DIR, f"{model_name}.pth")
 
     torch.save({
         "model_state_dict": model.state_dict(),
@@ -83,14 +88,14 @@ def train_labeled_images(dataset_path):
         "classes": dataset.classes,
         "total_images": len(dataset),
         "model_saved": model_path,
-        "status": "Image model trained and saved"
+        "status": "Image classification model trained"
     }
 
 
 # -----------------------------
 # Cluster unlabeled images
 # -----------------------------
-def cluster_unlabeled_images(folder):
+def cluster_unlabeled_images(folder, model_name="image_cluster_model"):
 
     features = []
     image_count = 0
@@ -113,12 +118,13 @@ def cluster_unlabeled_images(folder):
         return {"error": "No valid images found"}
 
     kmeans = KMeans(n_clusters=3)
+
     kmeans.fit(features)
 
     # -----------------------------
     # Save clustering model
     # -----------------------------
-    model_path = os.path.join(MODEL_DIR, "image_cluster_model.pkl")
+    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
 
     joblib.dump(kmeans, model_path)
 
@@ -127,21 +133,27 @@ def cluster_unlabeled_images(folder):
         "clusters": 3,
         "total_images": image_count,
         "model_saved": model_path,
-        "status": "Images clustered and model saved"
+        "status": "Image clustering model trained"
     }
 
 
 # -----------------------------
 # Main image training function
 # -----------------------------
-def train_image_model(dataset_path):
+def train_image_model(dataset_path, model_name="image_model"):
 
     dataset_type = detect_image_dataset_type(dataset_path)
 
     if dataset_type == "labeled":
 
-        return train_labeled_images(dataset_path)
+        return train_labeled_images(
+            dataset_path,
+            model_name
+        )
 
     else:
 
-        return cluster_unlabeled_images(dataset_path)
+        return cluster_unlabeled_images(
+            dataset_path,
+            model_name
+        )
