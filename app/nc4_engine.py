@@ -1,177 +1,211 @@
+# app/nc4_engine.py
+
 from netCDF4 import Dataset
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
 import joblib
 import os
 import json
 
-
-# =============================
-# Model directory
-# =============================
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
+# =============================
+# 🔍 STEP 0 — INSPECT FUNCTION
+# =============================
+def inspect_nc4(file_path):
+
+    ds = Dataset(file_path)
+
+    info = {}
+
+    for var in ds.variables:
+        v = ds.variables[var]
+
+        info[var] = {
+            "shape": v.shape,
+            "dtype": str(v.dtype),
+            "units": getattr(v, "units", "unknown")
+        }
+
+    ds.close()
+    return info
+
+
+# =============================
+# Check valid numeric variable
+# =============================
+def _is_valid_numeric(arr):
+    try:
+        arr = np.array(arr)
+        return arr.size > 0 and not np.isnan(arr).all()
+    except:
+        return False
+
+
+# =============================
+# Convert NC4 variable → 1D feature
+# =============================
+def extract_feature(var_data):
+
+    arr = np.array(var_data)
+
+    # multi-dim → mean reduce
+    if arr.ndim >= 2:
+        return arr.mean(axis=tuple(range(1, arr.ndim)))
+
+    return arr
+
+
+# =============================
+# 🧠 SMART TRAIN FUNCTION
+# =============================
 def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
 
-    # =============================
-    # Open NetCDF dataset
-    # =============================
-    data = Dataset(file_path, "r")
+    ds = Dataset(file_path, "r")
 
-    variables = list(data.variables.keys())
-    dimensions = list(data.dimensions.keys())
+    variables = list(ds.variables.keys())
+    dimensions = list(ds.dimensions.keys())
 
     # =============================
-    # Step 1 — Determine Target Variable
+    # STEP 1 — AUTO / MANUAL TARGET
     # =============================
-    var_name = None
-
-    # User provided variable
     if target_variable:
 
         if target_variable not in variables:
-
-            data.close()
-
+            ds.close()
             return {
-                "error": f"'{target_variable}' not found in dataset",
+                "error": f"{target_variable} not found",
                 "available_variables": variables
             }
 
-        var_name = target_variable
+        target_var = target_variable
 
     else:
-        # Auto detect usable variable
+        # auto pick first numeric
+        target_var = None
+
         for v in variables:
-
-            try:
-
-                values = data.variables[v][:]
-
-                values = np.array(values)
-
-                if values.size == 0:
-                    continue
-
-                if np.isnan(values).all():
-                    continue
-
-                var_name = v
+            if _is_valid_numeric(ds.variables[v][:]):
+                target_var = v
                 break
 
-            except:
+        if target_var is None:
+            ds.close()
+            return {"error": "No usable variable found"}
+
+    # =============================
+    # STEP 2 — TARGET PREP
+    # =============================
+    y_raw = ds.variables[target_var][:]
+    y = extract_feature(y_raw)
+
+    if len(np.shape(y)) == 0:
+        ds.close()
+        return {"error": "Target variable invalid"}
+
+    target_len = len(y)
+
+    # =============================
+    # STEP 3 — FEATURE BUILD
+    # =============================
+    X_list = []
+    feature_names = []
+
+    for v in variables:
+
+        if v == target_var:
+            continue
+
+        try:
+            data = ds.variables[v][:]
+
+            if not _is_valid_numeric(data):
                 continue
 
-    # =============================
-    # If no usable variable found
-    # =============================
-    if var_name is None:
+            feat = extract_feature(data)
 
-        data.close()
+            if np.isscalar(feat):
+                continue
 
-        return {
-            "error": "No valid variable found in NC4 file",
-            "available_variables": variables
-        }
+            feat = np.array(feat)
+            if feat.size == 0:
+                continue
 
-    # =============================
-    # Step 2 — Extract Variable Data
-    # =============================
-    try:
+            X_list.append(feat)
+            feature_names.append(v)
 
-        values = data.variables[var_name][:]
+        except:
+            continue
 
-        values = np.array(values)
+    if len(X_list) == 0:
+        ds.close()
+        return {"error": "No feature variables found"}
 
-        values = values.flatten()
+    common_length = min([target_len] + [len(feat) for feat in X_list])
+    if common_length == 0:
+        ds.close()
+        return {"error": "No usable samples found"}
 
-        values = values[~np.isnan(values)]
-
-    except Exception as e:
-
-        data.close()
-
-        return {
-            "error": f"Failed to read variable '{var_name}'",
-            "details": str(e)
-        }
-
-    if len(values) == 0:
-
-        data.close()
-
-        return {
-            "error": "Variable contains no usable numeric data",
-            "target_variable": var_name
-        }
+    y = y[:common_length]
+    X = np.vstack([feat[:common_length] for feat in X_list]).T
 
     # =============================
-    # Step 3 — Compute Statistics
+    # STEP 5 — TRAIN MODEL
     # =============================
-    mean_val = float(np.mean(values))
-    std_val = float(np.std(values))
-    min_val = float(np.min(values))
-    max_val = float(np.max(values))
+    model = RandomForestRegressor(n_estimators=100)
+    model.fit(X, y)
+
+    ds_meta = Dataset(file_path)
+
+    units = {}
+    for var in variables:
+        units[var] = getattr(ds_meta.variables[var], "units", "unknown")
+
+    ds_meta.close()
 
     # =============================
-    # Step 4 — Save Model
+    # STEP 7 — SAVE MODEL (🔥 IMPORTANT CHANGE)
     # =============================
     model_data = {
-        "target_variable": var_name,
-        "mean": mean_val,
-        "std": std_val,
-        "min": min_val,
-        "max": max_val
+        "model": model,
+        "target": target_var,
+        "features": feature_names,
+        "units": units,
+        "dimensions": dimensions
     }
 
-    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
-
+    model_path = os.path.join(MODEL_DIR, f"{model_name}_nc4.pkl")
     joblib.dump(model_data, model_path)
 
     # =============================
-    # Save Metadata (important for multi-model)
+    # STEP 8 — OPTIONAL JSON META
     # =============================
-    metadata = {
+    meta = {
         "model_name": model_name,
-        "dataset_type": "nc4",
-        "target_variable": var_name,
-        "variables": variables,
-        "dimensions": dimensions
+        "target": target_var,
+        "features": feature_names,
+        "samples": int(len(y)),
+        "units": units
     }
 
     meta_path = os.path.join(MODEL_DIR, f"{model_name}_meta.json")
 
     with open(meta_path, "w") as f:
-        json.dump(metadata, f, indent=4)
-
-    data.close()
+        json.dump(meta, f, indent=4)
 
     # =============================
-    # Step 5 — Return Results
+    # STEP 9 — RETURN
     # =============================
     return {
-
-        "dataset_type": "nc4_scientific",
-
+        "dataset_type": "nc4_ml",
         "model_name": model_name,
-
-        "target_variable": var_name,
-
-        "all_variables": variables,
-
-        "dimensions": dimensions,
-
-        "data_points": int(len(values)),
-
-        "statistics": {
-            "mean": mean_val,
-            "std": std_val,
-            "min": min_val,
-            "max": max_val
-        },
-
+        "target": target_var,
+        "target_unit": units.get(target_var, "unknown"),
+        "features": feature_names,
+        "feature_units": {f: units.get(f, "unknown") for f in feature_names},
+        "samples": int(len(y)),
         "model_saved": model_path,
-
-        "metadata_saved": meta_path
+        "status": "NC4 smart training completed ✅"
     }

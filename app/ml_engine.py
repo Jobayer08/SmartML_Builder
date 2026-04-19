@@ -1,15 +1,12 @@
 import numpy as np
-import pandas as pd
 import joblib
 import os
 import json
 
-from sklearn.model_selection import train_test_split, GridSearchCV
-
+from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -17,111 +14,61 @@ from sklearn.metrics import (
     mean_squared_error
 )
 
-from sklearn.preprocessing import LabelEncoder
-
-
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-# =========================
-# Detect ML Problem Type
-# =========================
+# -------------------------
+# Problem Type Detection
+# -------------------------
 def detect_problem_type(y):
-
-    unique_values = len(np.unique(y))
-
-    if unique_values <= 10:
-        return "classification"
-    else:
-        return "regression"
+    return "classification" if len(np.unique(y)) <= 10 else "regression"
 
 
-# =========================
+# -------------------------
 # Save Model + Metadata
-# =========================
-def save_model_with_metadata(model, features, target, model_name):
+# -------------------------
+def save_model(model, features, target, model_name):
+    joblib.dump(model, f"{MODEL_DIR}/{model_name}.pkl")
 
-    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
-    meta_path = os.path.join(MODEL_DIR, f"{model_name}_meta.json")
-
-    joblib.dump(model, model_path)
-
-    metadata = {
-        "model_name": model_name,
+    meta = {
         "features": features,
         "target": target
     }
 
-    with open(meta_path, "w") as f:
-        json.dump(metadata, f)
-
-    return model_path
+    with open(f"{MODEL_DIR}/{model_name}_meta.json", "w") as f:
+        json.dump(meta, f)
 
 
-# =========================
-# Data Preparation
-# =========================
-def prepare_data(df, target):
-
-    if target not in df.columns:
-        raise ValueError("Target column not found in dataset")
-
-    X = df.drop(columns=[target])
-    y = df[target]
-
-    # Encode categorical columns
-    X = pd.get_dummies(X)
-
-    # Encode target if categorical
-    if y.dtype == "object":
-        encoder = LabelEncoder()
-        y = encoder.fit_transform(y)
-
-    return X, y
-
-
-# =========================
+# -------------------------
 # Hyperparameter Optimization
-# =========================
-def optimize_model(model, X_train, y_train, problem_type):
-
-    if problem_type == "classification":
-
-        param_grid = {
-            "n_estimators": [50, 100],
-            "max_depth": [5, 10, None]
-        }
-
-        if isinstance(model, RandomForestClassifier):
-
-            grid = GridSearchCV(
-                model,
-                param_grid,
-                cv=3,
-                scoring="accuracy"
-            )
-
-            grid.fit(X_train, y_train)
-
-            return grid.best_estimator_, grid.best_params_
-
-    return model, {}
+# -------------------------
+def optimize_rf_classifier(model, X, y):
+    """Optimize Random Forest for classification"""
+    grid = GridSearchCV(
+        model,
+        {
+            "n_estimators": [50, 100, 150],
+            "max_depth": [5, 10, 15, None],
+            "min_samples_split": [2, 5, 10]
+        },
+        cv=3,
+        scoring="accuracy",
+        n_jobs=-1
+    )
+    grid.fit(X, y)
+    return grid.best_estimator_, grid.best_params_
 
 
-# =========================
-# Train ML Models
-# =========================
-def train_models(X_train, X_test, y_train, y_test, features, target):
+# -------------------------
+# Train Models (MAIN)
+# -------------------------
+def train_models(X_train, X_test, y_train, y_test, features, target, model_name):
 
     problem_type = detect_problem_type(y_train)
-
     results = {}
-    trained_models = {}
 
-    # =========================
-    # Classification Models
-    # =========================
+    # ========== CLASSIFICATION ==========
     if problem_type == "classification":
 
         models = {
@@ -130,10 +77,12 @@ def train_models(X_train, X_test, y_train, y_test, features, target):
             "Random Forest": RandomForestClassifier()
         }
 
+        best_acc = 0
+        best_model = None
+        best_name = ""
+
         for name, model in models.items():
-
             model.fit(X_train, y_train)
-
             preds = model.predict(X_test)
 
             acc = accuracy_score(y_test, preds)
@@ -146,96 +95,38 @@ def train_models(X_train, X_test, y_train, y_test, features, target):
                 "recall": float(rec)
             }
 
-            trained_models[name] = model
+            if acc > best_acc:
+                best_acc = acc
+                best_model = model
+                best_name = name
 
-        best_model_name = max(results, key=lambda x: results[x]["accuracy"])
-        best_model = trained_models[best_model_name]
+        # Optimize RandomForest only
+        if best_name == "Random Forest":
+            best_model, best_params = optimize_rf_classifier(best_model, X_train, y_train)
+        else:
+            best_params = {}
 
-    # =========================
-    # Regression Models
-    # =========================
+    # ========== REGRESSION ==========
     else:
+        best_model = LinearRegression()
+        best_model.fit(X_train, y_train)
+        preds = best_model.predict(X_test)
 
-        models = {
-            "Linear Regression": LinearRegression()
-        }
+        rmse = np.sqrt(mean_squared_error(y_test, preds))
 
-        for name, model in models.items():
+        results["Linear Regression"] = {"RMSE": float(rmse)}
+        best_name = "Linear Regression"
+        best_params = {}
 
-            model.fit(X_train, y_train)
-
-            preds = model.predict(X_test)
-
-            rmse = np.sqrt(mean_squared_error(y_test, preds))
-
-            results[name] = {
-                "RMSE": float(rmse)
-            }
-
-            trained_models[name] = model
-
-        best_model_name = min(results, key=lambda x: results[x]["RMSE"])
-        best_model = trained_models[best_model_name]
-
-    # =========================
-    # Optimization
-    # =========================
-    optimized_model, best_params = optimize_model(
-        best_model,
-        X_train,
-        y_train,
-        problem_type
-    )
-
-    # =========================
-    # Generate Model Name
-    # =========================
-    model_name = f"csv_model_{target}"
-
-    # =========================
-    # Save Model + Metadata
-    # =========================
-    model_path = save_model_with_metadata(
-        optimized_model,
-        features,
-        target,
-        model_name
-    )
+    # ========== SAVE ==========
+    save_model(best_model, features, target, model_name)
 
     return {
         "problem_type": problem_type,
         "model_results": results,
-        "best_model": best_model_name,
+        "best_model": best_name,
         "optimization": {
             "best_params": best_params,
-            "model_saved_path": model_path
+            "saved_as": model_name
         }
     }
-
-
-# =========================
-# Main CSV Training Pipeline
-# =========================
-def train_csv_model(df, target):
-
-    X, y = prepare_data(df, target)
-
-    features = X.columns.tolist()
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42
-    )
-
-    results = train_models(
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        features,
-        target
-    )
-
-    return results

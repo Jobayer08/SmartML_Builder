@@ -1,159 +1,98 @@
 import os
+import joblib
 import numpy as np
 from PIL import Image
 
-from torchvision import transforms, datasets
-from torch.utils.data import DataLoader
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
+from torchvision import models, transforms
+from torchvision.models import ResNet18_Weights
 
-from sklearn.cluster import KMeans
-import joblib
+from sklearn.ensemble import RandomForestClassifier
 
 
-# -----------------------------
-# Model save directory
-# -----------------------------
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+# ----------------------------------------
+# CNN Feature Extractor (ResNet18)
+# ----------------------------------------
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
 
-# -----------------------------
+cnn = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+cnn.fc = torch.nn.Identity()
+cnn.eval()
+
+
+def extract_features(img_path):
+    try:
+        img = Image.open(img_path).convert("RGB")
+        img = transform(img).unsqueeze(0)
+
+        with torch.no_grad():
+            feat = cnn(img)
+
+        return feat.squeeze().cpu().numpy().astype(np.float32)
+
+    except:
+        return None
+
+
+# ----------------------------------------
 # Detect dataset type
-# -----------------------------
+# ----------------------------------------
 def detect_image_dataset_type(dataset_path):
-
     subfolders = [
         f for f in os.listdir(dataset_path)
         if os.path.isdir(os.path.join(dataset_path, f))
     ]
-
-    if len(subfolders) > 0:
-        return "labeled"
-
-    return "unlabeled"
+    return "labeled" if len(subfolders) > 0 else "unlabeled"
 
 
-# -----------------------------
-# Train labeled image dataset
-# -----------------------------
+# ----------------------------------------
+# LABELED IMAGE → CLASSIFICATION
+# ----------------------------------------
 def train_labeled_images(dataset_path, model_name="image_classifier"):
 
-    transform = transforms.Compose([
-        transforms.Resize((64,64)),
-        transforms.ToTensor()
-    ])
+    X, y, classes = [], [], []
 
-    dataset = datasets.ImageFolder(dataset_path, transform=transform)
+    for label in os.listdir(dataset_path):
 
-    loader = DataLoader(dataset, batch_size=16, shuffle=True)
+        label_path = os.path.join(dataset_path, label)
+        if not os.path.isdir(label_path):
+            continue
 
-    model = nn.Sequential(
-        nn.Flatten(),
-        nn.Linear(64*64*3,128),
-        nn.ReLU(),
-        nn.Linear(128,len(dataset.classes))
-    )
+        classes.append(label)
 
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+        for img in os.listdir(label_path):
+            img_path = os.path.join(label_path, img)
+            feat = extract_features(img_path)
 
-    model.train()
+            if feat is not None:
+                X.append(feat)
+                y.append(label)
 
-    for epoch in range(2):
+    if len(X) == 0:
+        return {"error": "No valid images found"}
 
-        for images, labels in loader:
+    X = np.array(X, dtype=np.float32)
 
-            outputs = model(images)
-            loss = loss_fn(outputs, labels)
+    clf = RandomForestClassifier(n_estimators=100)
+    clf.fit(X, y)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    model_path = os.path.join(MODEL_DIR, f"{model_name}_image.pkl")
 
-    # -----------------------------
-    # Save trained image model
-    # -----------------------------
-    model_path = os.path.join(MODEL_DIR, f"{model_name}.pth")
-
-    torch.save({
-        "model_state_dict": model.state_dict(),
-        "classes": dataset.classes
+    joblib.dump({
+        "model": clf,
+        "classes": classes
     }, model_path)
 
     return {
         "task": "image_classification",
-        "classes": dataset.classes,
-        "total_images": len(dataset),
+        "classes": classes,
+        "total_images": len(X),
         "model_saved": model_path,
         "status": "Image classification model trained"
     }
-
-
-# -----------------------------
-# Cluster unlabeled images
-# -----------------------------
-def cluster_unlabeled_images(folder, model_name="image_cluster_model"):
-
-    features = []
-    image_count = 0
-
-    for file in os.listdir(folder):
-
-        path = os.path.join(folder, file)
-
-        try:
-            img = Image.open(path).resize((64,64))
-            arr = np.array(img).flatten()
-
-            features.append(arr)
-            image_count += 1
-
-        except:
-            pass
-
-    if len(features) == 0:
-        return {"error": "No valid images found"}
-
-    kmeans = KMeans(n_clusters=3)
-
-    kmeans.fit(features)
-
-    # -----------------------------
-    # Save clustering model
-    # -----------------------------
-    model_path = os.path.join(MODEL_DIR, f"{model_name}.pkl")
-
-    joblib.dump(kmeans, model_path)
-
-    return {
-        "task": "image_clustering",
-        "clusters": 3,
-        "total_images": image_count,
-        "model_saved": model_path,
-        "status": "Image clustering model trained"
-    }
-
-
-# -----------------------------
-# Main image training function
-# -----------------------------
-def train_image_model(dataset_path, model_name="image_model"):
-
-    dataset_type = detect_image_dataset_type(dataset_path)
-
-    if dataset_type == "labeled":
-
-        return train_labeled_images(
-            dataset_path,
-            model_name
-        )
-
-    else:
-
-        return cluster_unlabeled_images(
-            dataset_path,
-            model_name
-        )
