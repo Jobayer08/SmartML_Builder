@@ -11,9 +11,7 @@ import joblib
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# ==============================
-# CNN Feature Extractor (ResNet18)
-# ==============================
+
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor()
@@ -25,7 +23,7 @@ cnn.eval()
 
 
 def extract_features(img_path):
-    """Extract CNN features from an image"""
+    
     try:
         img = Image.open(img_path).convert("RGB")
         img = transform(img).unsqueeze(0)
@@ -39,9 +37,9 @@ def extract_features(img_path):
         return None
 
 
-# ==============================
+
 # IMAGE CLUSTERING
-# ==============================
+
 def cluster_images(data_dir, model_name="image_cluster"):
     """
     Cluster unlabeled images using K-means on CNN features.
@@ -50,7 +48,7 @@ def cluster_images(data_dir, model_name="image_cluster"):
     features = []
     image_paths = []
 
-    # Recursively walk through directory to find all images
+    
     for root, _, files in os.walk(data_dir):
         for file in files:
             if file.lower().endswith((".jpg", ".jpeg", ".png")):
@@ -74,7 +72,7 @@ def cluster_images(data_dir, model_name="image_cluster"):
     # Determine optimal number of clusters
     clusters = min(5, total_images)
 
-    # Train K-means
+    
     kmeans = KMeans(n_clusters=clusters, random_state=42)
     kmeans.fit(X)
 
@@ -85,7 +83,7 @@ def cluster_images(data_dir, model_name="image_cluster"):
     for path, label in zip(image_paths, labels):
         cluster_examples[int(label)].append(path)
 
-    # Save model with cluster examples
+    
     model_path = os.path.join(MODEL_DIR, f"{model_name}_cluster.pkl")
 
     joblib.dump({

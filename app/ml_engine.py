@@ -18,16 +18,14 @@ MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-# -------------------------
-# Problem Type Detection
-# -------------------------
+
 def detect_problem_type(y):
     return "classification" if len(np.unique(y)) <= 10 else "regression"
 
 
-# -------------------------
+
 # Save Model + Metadata
-# -------------------------
+
 def save_model(model, features, target, model_name):
     joblib.dump(model, f"{MODEL_DIR}/{model_name}.pkl")
 
@@ -40,9 +38,7 @@ def save_model(model, features, target, model_name):
         json.dump(meta, f)
 
 
-# -------------------------
-# Hyperparameter Optimization
-# -------------------------
+
 def optimize_rf_classifier(model, X, y):
     """Optimize Random Forest for classification"""
     grid = GridSearchCV(
@@ -60,15 +56,15 @@ def optimize_rf_classifier(model, X, y):
     return grid.best_estimator_, grid.best_params_
 
 
-# -------------------------
+
 # Train Models (MAIN)
-# -------------------------
+
 def train_models(X_train, X_test, y_train, y_test, features, target, model_name):
 
     problem_type = detect_problem_type(y_train)
     results = {}
 
-    # ========== CLASSIFICATION ==========
+    
     if problem_type == "classification":
 
         models = {
@@ -106,7 +102,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name)
         else:
             best_params = {}
 
-    # ========== REGRESSION ==========
+
     else:
         best_model = LinearRegression()
         best_model.fit(X_train, y_train)

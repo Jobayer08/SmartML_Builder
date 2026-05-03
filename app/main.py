@@ -28,17 +28,14 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-# ==============================
-# ROOT
-# ==============================
+
 @app.get("/")
 async def root():
     return {"status": "SmartML Builder Running"}
 
 
-# ==============================
+
 # MODEL REGISTRY
-# ==============================
 @app.get("/models/")
 def list_models():
 
@@ -54,9 +51,7 @@ def list_models():
     }
 
 
-# ==============================
-# 🔥 NEW: MODEL INFO API
-# ==============================
+
 @app.get("/model-info/{model_name}")
 def model_info(model_name: str):
 
@@ -78,7 +73,7 @@ def model_info(model_name: str):
 
         for f in features:
 
-            # simple smart example generation
+            
             if "id" in f.lower():
                 example[f] = 1
             elif "name" in f.lower():
@@ -105,7 +100,7 @@ def model_info(model_name: str):
             "message": "Upload .nc4 file for prediction"
         }
 
-    # Image model case
+
     else:
 
         return {
@@ -115,9 +110,9 @@ def model_info(model_name: str):
         }
 
 
-# ==============================
+
 # DATASET DETECTION ENGINE
-# ==============================
+
 def detect_dataset(csv_files, image_files, nc4_files):
 
     if nc4_files:
@@ -141,9 +136,7 @@ def detect_dataset(csv_files, image_files, nc4_files):
     return "unknown"
 
 
-# ====================================
-# STEP 1 — DATASET UPLOAD
-# ====================================
+
 @app.post("/upload-dataset/")
 async def upload_dataset(file: UploadFile = File(...)):
 
@@ -223,9 +216,6 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(400, "Only CSV or ZIP files supported")
 
 
-# ====================================
-# STEP 2 — FEATURE ENGINEERING
-# ====================================
 @app.post("/feature-engineering/")
 async def feature_engineering(
     file: UploadFile = File(...),
@@ -268,9 +258,9 @@ async def feature_engineering(
         raise HTTPException(400, "Unsupported file format")
 
 
-# ====================================
-# STEP 3 — MODEL TRAINING
-# ====================================
+
+# MODEL TRAINING
+
 @app.post("/train-model/")
 async def train_model(
     file: UploadFile = File(...),
@@ -370,9 +360,9 @@ async def train_model(
         raise HTTPException(400, "Unsupported file format")
 
 
-# ====================================
-# STEP 4 — PREDICTION API
-# ====================================
+
+# PREDICTION API
+
 class CSVPrediction(BaseModel):
     model_name: str
     data: dict
