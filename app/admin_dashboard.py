@@ -1,9 +1,18 @@
+import os
 import streamlit as st
 import pandas as pd
 from sqlalchemy import text, create_engine
 
 # Database connection
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/smartml"
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5433")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_NAME = os.getenv("DB_NAME", "smartml")
+
+DATABASE_URL = (
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
 engine = create_engine(DATABASE_URL)
 
 st.set_page_config(
@@ -118,6 +127,36 @@ if rows:
             "Type",
             "Prediction",
             "Time"
+        ]
+    )
+
+    st.dataframe(df, use_container_width=True)
+
+# ======================================================
+# API USAGE TRACKING
+# ======================================================
+
+st.subheader("🌐 API Usage Tracking")
+
+with engine.connect() as conn:
+
+    rows = conn.execute(text("""
+        SELECT endpoint,
+               method,
+               COUNT(*) as total
+        FROM api_usage
+        GROUP BY endpoint, method
+        ORDER BY total DESC
+    """)).fetchall()
+
+if rows:
+
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "Endpoint",
+            "Method",
+            "Hits"
         ]
     )
 

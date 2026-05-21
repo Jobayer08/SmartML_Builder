@@ -4,11 +4,17 @@ import psycopg2
 from datetime import datetime
 import os
 
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT")
+if not DB_PORT:
+    DB_PORT = "5433" if DB_HOST in ("localhost", "127.0.0.1") else "5432"
+
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
+    "host": DB_HOST,
     "database": os.getenv("DB_NAME", "smartml"),
     "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "postgres")
+    "password": os.getenv("DB_PASSWORD", "postgres"),
+    "port": DB_PORT
 }
 
 def get_conn():
@@ -50,6 +56,9 @@ def init_db():
         created_at TIMESTAMP
     );
     """)
+
+    # Add missing API usage columns for existing schema versions
+    cur.execute("ALTER TABLE api_usage ADD COLUMN IF NOT EXISTS method TEXT;")
 
     conn.commit()
     cur.close()
