@@ -6,6 +6,7 @@ from PIL import Image
 import torch
 from torchvision import models, transforms
 from torchvision.models import ResNet18_Weights
+from mlops.versioning import get_versioned_model_path, register_model
 
 from sklearn.ensemble import RandomForestClassifier
 
@@ -82,17 +83,24 @@ def train_labeled_images(dataset_path, model_name="image_classifier"):
     clf = RandomForestClassifier(n_estimators=100)
     clf.fit(X, y)
 
-    model_path = os.path.join(MODEL_DIR, f"{model_name}_image.pkl")
+    model_path, version = get_versioned_model_path(f"{model_name}_image")
 
     joblib.dump({
         "model": clf,
         "classes": classes
     }, model_path)
 
+    register_model(
+        model_name=model_name,
+        model_type="image",
+        version=version
+    )
+
     return {
         "task": "image_classification",
         "classes": classes,
         "total_images": len(X),
         "model_saved": model_path,
+        "version": version,
         "status": "Image classification model trained"
     }

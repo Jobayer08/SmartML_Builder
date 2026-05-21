@@ -5,6 +5,7 @@ import torch
 from torchvision import models, transforms
 from torchvision.models import ResNet18_Weights
 from sklearn.cluster import KMeans
+from mlops.versioning import get_versioned_model_path, register_model
 import joblib
 
 
@@ -83,18 +84,24 @@ def cluster_images(data_dir, model_name="image_cluster"):
     for path, label in zip(image_paths, labels):
         cluster_examples[int(label)].append(path)
 
-    
-    model_path = os.path.join(MODEL_DIR, f"{model_name}_cluster.pkl")
+    model_path, version = get_versioned_model_path(f"{model_name}_cluster")
 
     joblib.dump({
         "model": kmeans,
         "examples": cluster_examples
     }, model_path)
 
+    register_model(
+        model_name=model_name,
+        model_type="image",
+        version=version
+    )
+
     return {
         "task": "image_clustering",
         "images": total_images,
         "clusters": clusters,
         "model_saved_path": model_path,
+        "version": version,
         "status": "Clustering completed with examples"
     }

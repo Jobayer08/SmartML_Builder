@@ -3,6 +3,7 @@ import joblib
 import os
 import json
 
+from mlops.versioning import get_versioned_model_path, register_model
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -27,7 +28,14 @@ def detect_problem_type(y):
 # Save Model + Metadata
 
 def save_model(model, features, target, model_name):
-    joblib.dump(model, f"{MODEL_DIR}/{model_name}.pkl")
+    model_path, version = get_versioned_model_path(model_name)
+    joblib.dump(model, model_path)
+
+    register_model(
+        model_name=model_name,
+        model_type="csv",
+        version=version
+    )
 
     meta = {
         "features": features,
@@ -36,6 +44,8 @@ def save_model(model, features, target, model_name):
 
     with open(f"{MODEL_DIR}/{model_name}_meta.json", "w") as f:
         json.dump(meta, f)
+
+    return model_path, version
 
 
 
@@ -115,7 +125,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name)
         best_params = {}
 
     # ========== SAVE ==========
-    save_model(best_model, features, target, model_name)
+    model_path, version = save_model(best_model, features, target, model_name)
 
     return {
         "problem_type": problem_type,
@@ -123,6 +133,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name)
         "best_model": best_name,
         "optimization": {
             "best_params": best_params,
-            "saved_as": model_name
+            "saved_as": model_path,
+            "version": version
         }
     }

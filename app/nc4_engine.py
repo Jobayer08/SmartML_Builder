@@ -7,6 +7,8 @@ import joblib
 import os
 import json
 
+from mlops.versioning import get_versioned_model_path, register_model
+
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -176,8 +178,14 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
         "dimensions": dimensions
     }
 
-    model_path = os.path.join(MODEL_DIR, f"{model_name}_nc4.pkl")
+    model_path, version = get_versioned_model_path(f"{model_name}_nc4")
     joblib.dump(model_data, model_path)
+
+    register_model(
+        model_name=model_name,
+        model_type="nc4",
+        version=version
+    )
 
     # =============================
     # STEP 8 — OPTIONAL JSON META
@@ -207,5 +215,6 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
         "feature_units": {f: units.get(f, "unknown") for f in feature_names},
         "samples": int(len(y)),
         "model_saved": model_path,
+        "version": version,
         "status": "NC4 smart training completed ✅"
     }
