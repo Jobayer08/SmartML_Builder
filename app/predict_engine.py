@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 import torch
 from torchvision import models, transforms
 from torchvision.models import ResNet18_Weights
+from mlops.logger import log_prediction
 
 
 MODEL_DIR = "models"
@@ -18,9 +19,40 @@ MODEL_DIR = "models"
 # =========================================================
 # 🔹 UNIVERSAL MODEL LOADER
 # =========================================================
+def _find_latest_versioned_model(prefix):
+    if not os.path.exists(MODEL_DIR):
+        return None
+
+    latest_path = None
+    latest_version = 0
+
+    for filename in os.listdir(MODEL_DIR):
+        if not filename.endswith(".pkl"):
+            continue
+
+        if not filename.startswith(prefix + "_v"):
+            continue
+
+        try:
+            version = int(filename[len(prefix) + 2:-4])
+        except ValueError:
+            continue
+
+        if version > latest_version:
+            latest_version = version
+            latest_path = os.path.join(MODEL_DIR, filename)
+
+    return latest_path
+
+
 def load_model_path(model_name, model_type=None):
 
     if model_type == "image":
+        for prefix in [f"{model_name}_image", f"{model_name}_cluster"]:
+            versioned = _find_latest_versioned_model(prefix)
+            if versioned:
+                return versioned
+
         paths = [
             f"{MODEL_DIR}/{model_name}.pkl",
             f"{MODEL_DIR}/{model_name}_image.pkl",
@@ -28,12 +60,20 @@ def load_model_path(model_name, model_type=None):
         ]
 
     elif model_type == "nc4":
+        versioned = _find_latest_versioned_model(f"{model_name}_nc4")
+        if versioned:
+            return versioned
+
         paths = [
             f"{MODEL_DIR}/{model_name}.pkl",
             f"{MODEL_DIR}/{model_name}_nc4.pkl"
         ]
 
     else:
+        versioned = _find_latest_versioned_model(model_name)
+        if versioned:
+            return versioned
+
         paths = [
             f"{MODEL_DIR}/{model_name}.pkl"
         ]
@@ -98,6 +138,12 @@ def predict_csv(model_name, data):
 
     pred = model.predict(df)
 
+    log_prediction(
+        model_name,
+        "csv",
+        pred.tolist()
+    )
+
     return {
         "type": "csv_prediction",
         "prediction": pred.tolist()
@@ -122,6 +168,12 @@ def predict_image(model_name, image_path):
 
         pred = clf.predict(features)[0]
 
+        log_prediction(
+            model_name,
+            "image_classification",
+            str(pred)
+        )
+
         return {
             "type": "image_classification",
             "prediction": str(pred),
@@ -135,6 +187,12 @@ def predict_image(model_name, image_path):
 
         pred = kmeans.predict(features)[0]
 
+        log_prediction(
+            model_name,
+            "image_cluster",
+            int(pred)
+        )
+
         return {
             "type": "image_cluster",
             "cluster_id": int(pred),
@@ -144,6 +202,12 @@ def predict_image(model_name, image_path):
     # fallback
     else:
         pred = data.predict(features)[0]
+
+        log_prediction(
+            model_name,
+            "image_cluster",
+            int(pred)
+        )
 
         return {
             "type": "image_cluster",
@@ -202,6 +266,12 @@ def predict_nc4(model_name, file_path):
 
         pred = model.predict(X)
 
+        log_prediction(
+            model_name,
+            "nc4",
+            pred[:10].tolist()
+        )
+
         return {
             "type": "nc4_prediction",
             "target": target,
@@ -259,6 +329,12 @@ def predict_nc4(model_name, file_path):
         X = np.vstack(X_list).T
 
         pred = model.predict(X)
+
+        log_prediction(
+            model_name,
+            "nc4",
+            pred[:10].tolist()
+        )
 
         return {
             "type": "nc4_prediction",

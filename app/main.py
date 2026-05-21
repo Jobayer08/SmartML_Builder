@@ -16,6 +16,7 @@ from app.image_engine import train_labeled_images
 from app.clustering_engine import cluster_images
 from app.nc4_engine import analyze_nc4
 from app.predict_engine import predict_csv, predict_image, predict_nc4
+from mlops.logger import log_api
 
 
 app = FastAPI()
@@ -370,6 +371,7 @@ class CSVPrediction(BaseModel):
 
 @app.post("/predict-csv/")
 async def predict_csv_api(input: CSVPrediction):
+    log_api("/predict-csv/")
     return predict_csv(input.model_name, input.data)
 
 
@@ -378,6 +380,7 @@ async def predict_image_api(
     model_name: str = Form(...),
     file: UploadFile = File(...)
 ):
+    log_api("/predict-image/")
     path = f"{UPLOAD_DIR}/{file.filename}"
     with open(path, "wb") as f:
         f.write(await file.read())
@@ -389,6 +392,7 @@ async def predict_nc4_api(
     model_name: str = Form(...),
     file: UploadFile = File(...)
 ):
+    log_api("/predict-nc4/")
     path = f"{UPLOAD_DIR}/{file.filename}"
     with open(path, "wb") as f:
         f.write(await file.read())
