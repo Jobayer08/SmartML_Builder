@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from pydantic import BaseModel
 
 import pandas as pd
@@ -17,9 +17,36 @@ from app.clustering_engine import cluster_images
 from app.nc4_engine import analyze_nc4
 from app.predict_engine import predict_csv, predict_image, predict_nc4
 from mlops.logger import log_api
+from app.tracker import log_api_usage
 
 
 app = FastAPI()
+
+# ======================================================
+# API TRACKING MIDDLEWARE
+# ======================================================
+
+@app.middleware("http")
+async def track_api_requests(request: Request, call_next):
+
+    response = await call_next(request)
+
+    # skip docs routes
+    ignored = [
+        "/docs",
+        "/openapi.json",
+        "/redoc"
+    ]
+
+    if request.url.path not in ignored:
+
+        log_api_usage(
+            endpoint=request.url.path,
+            method=request.method
+        )
+
+    return response
+
 
 UPLOAD_DIR = "data/uploads"
 EXTRACT_DIR = "data/extracted"

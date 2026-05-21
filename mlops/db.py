@@ -46,7 +46,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS api_usage (
         id SERIAL PRIMARY KEY,
         endpoint TEXT,
-        time TIMESTAMP
+        method TEXT,
+        created_at TIMESTAMP
     );
     """)
 
@@ -86,14 +87,15 @@ def insert_prediction(model_name, input_type, prediction):
     conn.close()
 
 
-def insert_api_usage(endpoint):
+
+def insert_api_usage(endpoint, method="GET"):
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute("""
-    INSERT INTO api_usage (endpoint, time)
-    VALUES (%s, %s);
-    """, (endpoint, datetime.now()))
+    INSERT INTO api_usage (endpoint, method, created_at)
+    VALUES (%s, %s, %s);
+    """, (endpoint, method, datetime.now()))
 
     conn.commit()
     cur.close()
