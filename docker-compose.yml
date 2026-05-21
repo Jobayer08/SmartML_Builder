@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+
+  # ---------------------------------------------------
+  # FASTAPI APP
+  # ---------------------------------------------------
+  app:
+    build: .
+    container_name: smartml_app
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - .:/app
+
+    depends_on:
+      - postgres
+
+    environment:
+      DB_HOST: postgres
+      DB_NAME: smartml
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
+  # ---------------------------------------------------
+  # POSTGRES DATABASE
+  # ---------------------------------------------------
+  postgres:
+    image: postgres:15
+
+    container_name: smartml_db
+
+    restart: always
+
+    environment:
+      POSTGRES_DB: smartml
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+volumes:
+  postgres_data:
