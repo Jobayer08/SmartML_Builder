@@ -18,9 +18,27 @@ from app.nc4_engine import analyze_nc4
 from app.predict_engine import predict_csv, predict_image, predict_nc4
 from mlops.logger import log_api
 from app.tracker import log_api_usage
+from mlops.db import init_db
+from app.schemas import (
+    RegisterRequest,
+    LoginRequest
+)
+
+from app.auth import (
+    hash_password,
+    verify_password,
+    create_access_token
+)
+
+from mlops.db import (
+    SessionLocal,
+    User
+)
 
 
 app = FastAPI()
+
+init_db()
 
 # ======================================================
 # API TRACKING MIDDLEWARE
@@ -79,6 +97,92 @@ def list_models():
     }
 
 
+# ======================================================
+# REGISTER
+# ======================================================
+
+@app.post("/register")
+def register(user: RegisterRequest):
+
+    db = SessionLocal()
+
+    # email exists?
+    existing = db.query(User).filter(
+        User.email == user.email
+    ).first()
+
+    if existing:
+
+        db.close()
+
+        return {
+            "error": "Email already registered"
+        }
+
+    # create user
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        password=hash_password(user.password)
+    )
+
+    db.add(new_user)
+    db.commit()
+
+    db.close()
+
+    return {
+        "message": "User registered successfully"
+    }
+
+
+# ======================================================
+# LOGIN
+# ======================================================
+
+@app.post("/login")
+def login(data: LoginRequest):
+
+    db = SessionLocal()
+
+    user = db.query(User).filter(
+        User.email == data.email
+    ).first()
+
+    if not user:
+
+        db.close()
+
+        return {
+            "error": "Invalid email"
+        }
+
+    # verify password
+    valid = verify_password(
+        data.password,
+        user.password
+    )
+
+    if not valid:
+
+        db.close()
+
+        return {
+            "error": "Invalid password"
+        }
+
+    # create JWT token
+    access_token = create_access_token({
+        "user_id": user.id,
+        "email": user.email
+    })
+
+    db.close()
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 @app.get("/model-info/{model_name}")
 def model_info(model_name: str):

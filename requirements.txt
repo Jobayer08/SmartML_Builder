@@ -10,3 +10,5 @@ torchvision
 netCDF4
 psycopg2-binary
 python-multipart
+python-jose
+passlib[bcrypt]
