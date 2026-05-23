@@ -1,4 +1,15 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
+from fastapi import (
+    FastAPI,
+    File,
+    UploadFile,
+    HTTPException,
+    Form,
+    Request
+)
+
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+
 from pydantic import BaseModel
 
 import pandas as pd
@@ -8,17 +19,35 @@ import zipfile
 import os
 import shutil
 import json
+
 from netCDF4 import Dataset
 
-from app.preprocessing import smart_preprocessing, auto_split
+from app.preprocessing import (
+    smart_preprocessing,
+    auto_split
+)
+
 from app.ml_engine import train_models
 from app.image_engine import train_labeled_images
 from app.clustering_engine import cluster_images
 from app.nc4_engine import analyze_nc4
-from app.predict_engine import predict_csv, predict_image, predict_nc4
+
+from app.predict_engine import (
+    predict_csv,
+    predict_image,
+    predict_nc4
+)
+
 from mlops.logger import log_api
 from app.tracker import log_api_usage
-from mlops.db import init_db
+
+from mlops.db import (
+    init_db,
+    create_user,
+    get_user_by_email,
+    get_user_by_id
+)
+
 from app.schemas import (
     RegisterRequest,
     LoginRequest
@@ -30,26 +59,70 @@ from app.auth import (
     create_access_token
 )
 
-from mlops.db import (
-    SessionLocal,
-    User
-)
+from fastapi import Depends
+from app.dependencies import get_current_user
 
+
+# ======================================================
+# APP
+# ======================================================
 
 app = FastAPI()
 
 init_db()
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="login"
+)
+
+
+# ======================================================
+# JWT SETTINGS
+# ======================================================
+
+SECRET_KEY = "SMARTML_SECRET_KEY"
+ALGORITHM = "HS256"
+
+
+# ======================================================
+# GET CURRENT USER
+# ======================================================
+
+def get_current_user(token: str):
+
+    try:
+
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            return None
+
+        user = get_user_by_id(user_id)
+
+        return user
+
+    except JWTError:
+        return None
+
 
 # ======================================================
 # API TRACKING MIDDLEWARE
 # ======================================================
 
 @app.middleware("http")
-async def track_api_requests(request: Request, call_next):
+async def track_api_requests(
+    request: Request,
+    call_next
+):
 
     response = await call_next(request)
 
-    # skip docs routes
     ignored = [
         "/docs",
         "/openapi.json",
@@ -66,6 +139,10 @@ async def track_api_requests(request: Request, call_next):
     return response
 
 
+# ======================================================
+# DIRECTORIES
+# ======================================================
+
 UPLOAD_DIR = "data/uploads"
 EXTRACT_DIR = "data/extracted"
 MODEL_DIR = "models"
@@ -74,26 +151,15 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
+# ======================================================
+# ROOT
+# ======================================================
 
 @app.get("/")
 async def root():
-    return {"status": "SmartML Builder Running"}
-
-
-
-# MODEL REGISTRY
-@app.get("/models/")
-def list_models():
-
-    models = []
-
-    for f in os.listdir(MODEL_DIR):
-
-        if f.endswith(".pkl"):
-            models.append(f.replace(".pkl", ""))
 
     return {
-        "available_models": models
+        "status": "SmartML Builder Running"
     }
 
 
@@ -104,32 +170,21 @@ def list_models():
 @app.post("/register")
 def register(user: RegisterRequest):
 
-    db = SessionLocal()
-
-    # email exists?
-    existing = db.query(User).filter(
-        User.email == user.email
-    ).first()
+    existing = get_user_by_email(user.email)
 
     if existing:
-
-        db.close()
 
         return {
             "error": "Email already registered"
         }
 
-    # create user
-    new_user = User(
+    hashed = hash_password(user.password)
+
+    create_user(
         username=user.username,
         email=user.email,
-        password=hash_password(user.password)
+        password=hashed
     )
-
-    db.add(new_user)
-    db.commit()
-
-    db.close()
 
     return {
         "message": "User registered successfully"
@@ -143,59 +198,138 @@ def register(user: RegisterRequest):
 @app.post("/login")
 def login(data: LoginRequest):
 
-    db = SessionLocal()
-
-    user = db.query(User).filter(
-        User.email == data.email
-    ).first()
+    user = get_user_by_email(data.email)
 
     if not user:
-
-        db.close()
 
         return {
             "error": "Invalid email"
         }
 
-    # verify password
     valid = verify_password(
         data.password,
-        user.password
+        user["password"]
     )
 
     if not valid:
-
-        db.close()
 
         return {
             "error": "Invalid password"
         }
 
-    # create JWT token
     access_token = create_access_token({
-        "user_id": user.id,
-        "email": user.email
+        "user_id": user["id"],
+        "email": user["email"]
     })
-
-    db.close()
 
     return {
         "access_token": access_token,
         "token_type": "bearer"
     }
 
+# ======================================================
+# MY MODELS
+# ======================================================
+
+@app.get("/my-models")
+def my_models(token: str):
+
+    from mlops.db import get_user_models
+
+    user = get_current_user(token)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    models = get_user_models(user["id"])
+
+    result = []
+    for m in models:
+        result.append({
+            "id": m["id"],
+            "model_name": m["model_name"],
+            "model_type": m["model_type"],
+            "created_at": m["created_at"]
+        })
+
+    return {
+        "user": user["username"],
+        "total_models": len(result),
+        "models": result
+    }
+
+
+# ======================================================
+# PROTECTED ROUTE
+# ======================================================
+
+@app.get("/my-profile")
+def my_profile(token: str):
+
+    user = get_current_user(token)
+
+    if not user:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "email": user["email"]
+    }
+
+
+# ======================================================
+# MODEL REGISTRY
+# ======================================================
+
+@app.get("/models/")
+def list_models():
+
+    models = []
+
+    for f in os.listdir(MODEL_DIR):
+
+        if f.endswith(".pkl"):
+
+            models.append(
+                f.replace(".pkl", "")
+            )
+
+    return {
+        "available_models": models
+    }
+
+
+# ======================================================
+# MODEL INFO
+# ======================================================
+
 @app.get("/model-info/{model_name}")
 def model_info(model_name: str):
 
-    meta_path = os.path.join(MODEL_DIR, f"{model_name}_meta.json")
+    meta_path = os.path.join(
+        MODEL_DIR,
+        f"{model_name}_meta.json"
+    )
 
     if not os.path.exists(meta_path):
-        raise HTTPException(404, "Model metadata not found")
+
+        raise HTTPException(
+            404,
+            "Model metadata not found"
+        )
 
     with open(meta_path) as f:
         meta = json.load(f)
 
-    # CSV model case
+    # CSV
     if "features" in meta and "target" in meta:
 
         features = meta["features"]
@@ -205,11 +339,12 @@ def model_info(model_name: str):
 
         for f in features:
 
-            
             if "id" in f.lower():
                 example[f] = 1
+
             elif "name" in f.lower():
                 example[f] = "example"
+
             else:
                 example[f] = 0
 
@@ -221,7 +356,7 @@ def model_info(model_name: str):
             "example_input": example
         }
 
-    # NC4 model case
+    # NC4
     elif meta.get("dataset_type") == "nc4":
 
         return {
@@ -232,7 +367,7 @@ def model_info(model_name: str):
             "message": "Upload .nc4 file for prediction"
         }
 
-
+    # IMAGE
     else:
 
         return {
@@ -242,10 +377,15 @@ def model_info(model_name: str):
         }
 
 
+# ======================================================
+# DATASET DETECTOR
+# ======================================================
 
-# DATASET DETECTION ENGINE
-
-def detect_dataset(csv_files, image_files, nc4_files):
+def detect_dataset(
+    csv_files,
+    image_files,
+    nc4_files
+):
 
     if nc4_files:
         return "nc4"
@@ -255,12 +395,14 @@ def detect_dataset(csv_files, image_files, nc4_files):
         folders = set()
 
         for path in image_files:
-            folders.add(os.path.dirname(path))
+            folders.add(
+                os.path.dirname(path)
+            )
 
         if len(folders) > 1:
             return "image_labeled"
-        else:
-            return "image_unlabeled"
+
+        return "image_unlabeled"
 
     if csv_files:
         return "csv"
@@ -268,22 +410,43 @@ def detect_dataset(csv_files, image_files, nc4_files):
     return "unknown"
 
 
+# ======================================================
+# UPLOAD DATASET
+# ======================================================
 
 @app.post("/upload-dataset/")
-async def upload_dataset(file: UploadFile = File(...)):
+async def upload_dataset(
+    file: UploadFile = File(...)
+):
 
     filename = file.filename.lower()
 
+    # CSV
     if filename.endswith(".csv"):
 
         contents = await file.read()
-        df = pd.read_csv(StringIO(contents.decode("utf-8")), low_memory=False)
+
+        df = pd.read_csv(
+            StringIO(
+                contents.decode("utf-8")
+            ),
+            low_memory=False
+        )
 
         df = df.drop_duplicates()
         df = df.ffill()
 
-        preview = df.head(5).replace({np.nan: None}).to_dict()
-        summary = df.describe(include="all").replace({np.nan: None}).to_dict()
+        preview = (
+            df.head(5)
+            .replace({np.nan: None})
+            .to_dict()
+        )
+
+        summary = (
+            df.describe(include="all")
+            .replace({np.nan: None})
+            .to_dict()
+        )
 
         return {
             "dataset_type": "CSV",
@@ -293,15 +456,26 @@ async def upload_dataset(file: UploadFile = File(...)):
             "summary": summary
         }
 
+    # ZIP
     elif filename.endswith(".zip"):
 
-        zip_path = os.path.join(UPLOAD_DIR, file.filename)
+        zip_path = os.path.join(
+            UPLOAD_DIR,
+            file.filename
+        )
 
         with open(zip_path, "wb") as f:
             f.write(await file.read())
 
-        shutil.rmtree(EXTRACT_DIR, ignore_errors=True)
-        os.makedirs(EXTRACT_DIR, exist_ok=True)
+        shutil.rmtree(
+            EXTRACT_DIR,
+            ignore_errors=True
+        )
+
+        os.makedirs(
+            EXTRACT_DIR,
+            exist_ok=True
+        )
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(EXTRACT_DIR)
@@ -319,13 +493,19 @@ async def upload_dataset(file: UploadFile = File(...)):
                 if name.lower().endswith(".csv"):
                     csv_files.append(path)
 
-                elif name.lower().endswith((".jpg", ".jpeg", ".png")):
+                elif name.lower().endswith(
+                    (".jpg", ".jpeg", ".png")
+                ):
                     image_files.append(path)
 
                 elif name.lower().endswith(".nc4"):
                     nc4_files.append(path)
 
-        dataset_type = detect_dataset(csv_files, image_files, nc4_files)
+        dataset_type = detect_dataset(
+            csv_files,
+            image_files,
+            nc4_files
+        )
 
         result = {
             "dataset_type": dataset_type,
@@ -337,7 +517,11 @@ async def upload_dataset(file: UploadFile = File(...)):
         if nc4_files:
 
             nc_data = Dataset(nc4_files[0])
-            variables = list(nc_data.variables.keys())
+
+            variables = list(
+                nc_data.variables.keys()
+            )
+
             nc_data.close()
 
             result["nc4_variables"] = variables
@@ -345,8 +529,16 @@ async def upload_dataset(file: UploadFile = File(...)):
         return result
 
     else:
-        raise HTTPException(400, "Only CSV or ZIP files supported")
 
+        raise HTTPException(
+            400,
+            "Only CSV or ZIP files supported"
+        )
+
+
+# ======================================================
+# FEATURE ENGINEERING
+# ======================================================
 
 @app.post("/feature-engineering/")
 async def feature_engineering(
@@ -359,16 +551,26 @@ async def feature_engineering(
     if filename.endswith(".csv"):
 
         if not target_column:
-            raise HTTPException(400, "target_column required for CSV")
+
+            raise HTTPException(
+                400,
+                "target_column required for CSV"
+            )
 
         contents = await file.read()
 
         df = pd.read_csv(
-            StringIO(contents.decode("utf-8")),
+            StringIO(
+                contents.decode("utf-8")
+            ),
             low_memory=False
         )
 
-        X, y = smart_preprocessing(df, target_column)
+        X, y = smart_preprocessing(
+            df,
+            target_column
+        )
+
         X_train, X_test, y_train, y_test = auto_split(X, y)
 
         return {
@@ -387,34 +589,65 @@ async def feature_engineering(
         }
 
     else:
-        raise HTTPException(400, "Unsupported file format")
+
+        raise HTTPException(
+            400,
+            "Unsupported file format"
+        )
 
 
-
-# MODEL TRAINING
+# ======================================================
+# TRAIN MODEL
+# ======================================================
 
 @app.post("/train-model/")
 async def train_model(
     file: UploadFile = File(...),
     target_column: str = Form(None),
-    model_name: str = Form("default_model")
+    model_name: str = Form("default_model"),
+    token: str = Form(...)
 ):
+
+    from mlops.db import insert_model, get_versioned_model_path
+
+    user = get_current_user(token)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    user_id = user["id"]
+    user_model_dir = f"{MODEL_DIR}/user_{user_id}"
+    os.makedirs(user_model_dir, exist_ok=True)
 
     filename = file.filename.lower()
 
+    # CSV
     if filename.endswith(".csv"):
 
         if not target_column:
-            raise HTTPException(400, "target_column required")
+
+            raise HTTPException(
+                400,
+                "target_column required"
+            )
 
         contents = await file.read()
 
         df = pd.read_csv(
-            StringIO(contents.decode("utf-8")),
+            StringIO(
+                contents.decode("utf-8")
+            ),
             low_memory=False
         )
 
-        X, y = smart_preprocessing(df, target_column)
+        X, y = smart_preprocessing(
+            df,
+            target_column
+        )
+
         X_train, X_test, y_train, y_test = auto_split(X, y)
 
         result = train_models(
@@ -424,108 +657,273 @@ async def train_model(
             y_test,
             features=list(X.columns),
             target=target_column,
-            model_name=model_name
+            model_name=model_name,
+            user_dir=user_model_dir
+        )
+
+        # Save to DB
+        model_path = f"{user_model_dir}/{model_name}_v1.pkl"
+        insert_model(
+            user_id=user_id,
+            model_name=model_name,
+            model_type="csv",
+            version=1,
+            file_path=model_path
         )
 
         return {
             "dataset_type": "csv",
             "model_name": model_name,
             "target": target_column,
+            "user_id": user_id,
             "training_result": result
         }
 
+    # ZIP
     elif filename.endswith(".zip"):
 
-        zip_path = os.path.join(UPLOAD_DIR, file.filename)
+        zip_path = os.path.join(
+            UPLOAD_DIR,
+            file.filename
+        )
 
         with open(zip_path, "wb") as f:
             f.write(await file.read())
 
-        shutil.rmtree(EXTRACT_DIR, ignore_errors=True)
-        os.makedirs(EXTRACT_DIR, exist_ok=True)
+        shutil.rmtree(
+            EXTRACT_DIR,
+            ignore_errors=True
+        )
+
+        os.makedirs(
+            EXTRACT_DIR,
+            exist_ok=True
+        )
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(EXTRACT_DIR)
 
-        csv_files, image_files, nc4_files = [], [], []
+        csv_files = []
+        image_files = []
+        nc4_files = []
 
         for root, _, files in os.walk(EXTRACT_DIR):
+
             for name in files:
+
                 path = os.path.join(root, name)
 
                 if name.endswith(".csv"):
                     csv_files.append(path)
-                elif name.lower().endswith((".jpg", ".png", ".jpeg")):
+
+                elif name.lower().endswith(
+                    (".jpg", ".png", ".jpeg")
+                ):
                     image_files.append(path)
+
                 elif name.endswith(".nc4"):
                     nc4_files.append(path)
 
-        dataset_type = detect_dataset(csv_files, image_files, nc4_files)
+        dataset_type = detect_dataset(
+            csv_files,
+            image_files,
+            nc4_files
+        )
 
         if dataset_type == "image_labeled":
+
+            result = train_labeled_images(
+                EXTRACT_DIR,
+                model_name,
+                user_dir=user_model_dir
+            )
+
+            insert_model(
+                user_id=user_id,
+                model_name=model_name,
+                model_type="image_labeled",
+                version=1,
+                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+            )
 
             return {
                 "dataset_type": dataset_type,
                 "model_name": model_name,
-                "result": train_labeled_images(EXTRACT_DIR, model_name)
+                "user_id": user_id,
+                "result": result
             }
 
         if dataset_type == "image_unlabeled":
 
+            result = cluster_images(
+                EXTRACT_DIR,
+                model_name,
+                user_dir=user_model_dir
+            )
+
+            insert_model(
+                user_id=user_id,
+                model_name=model_name,
+                model_type="image_unlabeled",
+                version=1,
+                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+            )
+
             return {
                 "dataset_type": dataset_type,
                 "model_name": model_name,
-                "result": cluster_images(EXTRACT_DIR, model_name)
+                "user_id": user_id,
+                "result": result
             }
 
         if dataset_type == "nc4":
 
+            result = analyze_nc4(
+                nc4_files[0],
+                target_column,
+                model_name,
+                user_dir=user_model_dir
+            )
+
+            insert_model(
+                user_id=user_id,
+                model_name=model_name,
+                model_type="nc4",
+                version=1,
+                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+            )
+
             return {
                 "dataset_type": dataset_type,
                 "model_name": model_name,
-                "result": analyze_nc4(nc4_files[0], target_column, model_name)
+                "user_id": user_id,
+                "result": result
             }
 
-        return {"dataset_type": "unknown"}
+        return {
+            "dataset_type": "unknown"
+        }
 
     else:
-        raise HTTPException(400, "Unsupported file format")
+
+        raise HTTPException(
+            400,
+            "Unsupported file format"
+        )
 
 
-
-# PREDICTION API
+# ======================================================
+# PREDICT CSV
+# ======================================================
 
 class CSVPrediction(BaseModel):
+
     model_name: str
     data: dict
+    token: str
 
 
 @app.post("/predict-csv/")
-async def predict_csv_api(input: CSVPrediction):
-    log_api("/predict-csv/")
-    return predict_csv(input.model_name, input.data)
+async def predict_csv_api(
+    input: CSVPrediction
+):
 
+    from mlops.db import get_model_by_name
+
+    log_api("/predict-csv/")
+
+    user = get_current_user(input.token)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    # Check if user owns this model
+    model = get_model_by_name(
+        user["id"],
+        input.model_name
+    )
+
+    if not model:
+        raise HTTPException(
+            status_code=403,
+            detail="Model not found or access denied"
+        )
+
+    return predict_csv(
+        input.model_name,
+        input.data,
+        user_dir=f"{MODEL_DIR}/user_{user['id']}"
+    )
+
+
+# ======================================================
+# PREDICT IMAGE
+# ======================================================
 
 @app.post("/predict-image/")
 async def predict_image_api(
     model_name: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    token: str = Form(...)
 ):
+
+    from mlops.db import get_model_by_name
+
     log_api("/predict-image/")
+
+    user = get_current_user(token)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    # Check if user owns this model
+    model = get_model_by_name(
+        user["id"],
+        model_name
+    )
+
+    if not model:
+        raise HTTPException(
+            status_code=403,
+            detail="Model not found or access denied"
+        )
+
     path = f"{UPLOAD_DIR}/{file.filename}"
+
     with open(path, "wb") as f:
         f.write(await file.read())
-    return predict_image(model_name, path)
 
+    return predict_image(
+        model_name,
+        path,
+        user_dir=f"{MODEL_DIR}/user_{user['id']}"
+    )
+
+
+# ======================================================
+# PREDICT NC4
+# ======================================================
 
 @app.post("/predict-nc4/")
 async def predict_nc4_api(
     model_name: str = Form(...),
     file: UploadFile = File(...)
 ):
+
     log_api("/predict-nc4/")
+
     path = f"{UPLOAD_DIR}/{file.filename}"
+
     with open(path, "wb") as f:
         f.write(await file.read())
-    return predict_nc4(model_name, path)
 
+    return predict_nc4(
+        model_name,
+        path
+    )
