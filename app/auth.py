@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from jose import jwt
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 
 
@@ -64,3 +64,31 @@ def create_access_token(data: dict):
     )
 
     return encoded_jwt
+
+# ======================================================
+# GET CURRENT USER
+# ======================================================
+
+def get_current_user(token: str):
+
+    from mlops.db import get_user_by_id
+
+    try:
+
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            return None
+
+        user = get_user_by_id(user_id)
+
+        return user
+
+    except JWTError:
+        return None

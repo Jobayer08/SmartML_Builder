@@ -121,6 +121,30 @@ def init_db():
     );
     """)
 
+    # ==================================================
+    # DATASETS TABLE
+    # ==================================================
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS datasets (
+
+        id SERIAL PRIMARY KEY,
+
+        user_id INTEGER REFERENCES users(id),
+
+        dataset_name TEXT,
+
+        dataset_type TEXT,
+
+        file_path TEXT,
+
+        file_size_mb FLOAT,
+
+        created_at TIMESTAMP
+
+    );
+    """)
+
     conn.commit()
 
     cur.close()
@@ -494,6 +518,72 @@ def most_used_models():
 
     LIMIT 10;
     """)
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+# ======================================================
+# DATASET FUNCTIONS
+# ======================================================
+
+def insert_dataset(
+    user_id,
+    dataset_name,
+    dataset_type,
+    file_path,
+    file_size_mb
+):
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+    INSERT INTO datasets (
+
+        user_id,
+        dataset_name,
+        dataset_type,
+        file_path,
+        file_size_mb,
+        created_at
+
+    )
+    VALUES (%s, %s, %s, %s, %s, %s);
+    """, (
+
+        user_id,
+        dataset_name,
+        dataset_type,
+        file_path,
+        file_size_mb,
+        datetime.now()
+
+    ))
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+
+def get_user_datasets(user_id):
+
+    conn = get_conn()
+
+    cur = conn.cursor(
+        cursor_factory=RealDictCursor
+    )
+
+    cur.execute("""
+    SELECT *
+    FROM datasets
+    WHERE user_id=%s
+    ORDER BY created_at DESC;
+    """, (user_id,))
 
     rows = cur.fetchall()
 

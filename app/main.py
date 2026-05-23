@@ -4,7 +4,8 @@ from fastapi import (
     UploadFile,
     HTTPException,
     Form,
-    Request
+    Request,
+    Depends
 )
 
 from fastapi.security import OAuth2PasswordBearer
@@ -56,11 +57,19 @@ from app.schemas import (
 from app.auth import (
     hash_password,
     verify_password,
-    create_access_token
+    create_access_token,
+    get_current_user
 )
 
-from fastapi import Depends
-from app.dependencies import get_current_user
+from mlops.dataset_utils import (
+    detect_dataset_type,
+    get_file_size_mb
+)
+
+from mlops.db import insert_dataset
+
+from mlops.db import get_user_datasets
+
 
 
 # ======================================================
@@ -82,33 +91,6 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 SECRET_KEY = "SMARTML_SECRET_KEY"
 ALGORITHM = "HS256"
-
-
-# ======================================================
-# GET CURRENT USER
-# ======================================================
-
-def get_current_user(token: str):
-
-    try:
-
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM]
-        )
-
-        user_id = payload.get("user_id")
-
-        if not user_id:
-            return None
-
-        user = get_user_by_id(user_id)
-
-        return user
-
-    except JWTError:
-        return None
 
 
 # ======================================================
@@ -416,75 +398,153 @@ def detect_dataset(
 
 @app.post("/upload-dataset/")
 async def upload_dataset(
-    file: UploadFile = File(...)
+
+    file: UploadFile = File(...),
+
+    current_user: dict = Depends(get_current_user)
+
 ):
 
     filename = file.filename.lower()
 
-    # CSV
+    # ==================================================
+    # USER DATASET FOLDER
+    # ==================================================
+
+    user_dataset_dir = os.path.join(
+        "datasets",
+        f"user_{current_user['id']}"
+    )
+
+    os.makedirs(
+        user_dataset_dir,
+        exist_ok=True
+    )
+
+    # ==================================================
+    # SAVE ORIGINAL FILE
+    # ==================================================
+
+    saved_file_path = os.path.join(
+        user_dataset_dir,
+        file.filename
+    )
+
+    with open(saved_file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # ==================================================
+    # FILE SIZE
+    # ==================================================
+
+    size_mb = get_file_size_mb(
+        saved_file_path
+    )
+
+    # ==================================================
+    # CSV DATASET
+    # ==================================================
+
     if filename.endswith(".csv"):
 
-        contents = await file.read()
-
         df = pd.read_csv(
-            StringIO(
-                contents.decode("utf-8")
-            ),
+            saved_file_path,
             low_memory=False
         )
 
+        # cleaning
         df = df.drop_duplicates()
         df = df.ffill()
 
+        # preview
         preview = (
             df.head(5)
             .replace({np.nan: None})
             .to_dict()
         )
 
+        # summary
         summary = (
             df.describe(include="all")
             .replace({np.nan: None})
             .to_dict()
         )
 
-        return {
-            "dataset_type": "CSV",
-            "rows": int(len(df)),
-            "columns": list(df.columns),
-            "preview": preview,
-            "summary": summary
-        }
-
-    # ZIP
-    elif filename.endswith(".zip"):
-
-        zip_path = os.path.join(
-            UPLOAD_DIR,
-            file.filename
+        # save dataset info in DB
+        insert_dataset(
+            user_id=current_user["id"],
+            dataset_name=file.filename,
+            dataset_type="csv",
+            file_path=saved_file_path,
+            file_size_mb=size_mb
         )
 
-        with open(zip_path, "wb") as f:
-            f.write(await file.read())
+        return {
+
+            "message": "CSV dataset uploaded",
+
+            "dataset_type": "csv",
+
+            "dataset_name": file.filename,
+
+            "rows": int(len(df)),
+
+            "columns": list(df.columns),
+
+            "size_mb": size_mb,
+
+            "preview": preview,
+
+            "summary": summary,
+
+            "saved_path": saved_file_path
+        }
+
+    # ==================================================
+    # ZIP DATASET
+    # ==================================================
+
+    elif filename.endswith(".zip"):
+
+        # ----------------------------------------------
+        # Extract dir
+        # ----------------------------------------------
+
+        extract_dir = os.path.join(
+            user_dataset_dir,
+            "extracted"
+        )
 
         shutil.rmtree(
-            EXTRACT_DIR,
+            extract_dir,
             ignore_errors=True
         )
 
         os.makedirs(
-            EXTRACT_DIR,
+            extract_dir,
             exist_ok=True
         )
 
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(EXTRACT_DIR)
+        # ----------------------------------------------
+        # Extract ZIP
+        # ----------------------------------------------
+
+        with zipfile.ZipFile(
+            saved_file_path,
+            "r"
+        ) as zip_ref:
+
+            zip_ref.extractall(extract_dir)
+
+        # ----------------------------------------------
+        # Detect contents
+        # ----------------------------------------------
 
         csv_files = []
         image_files = []
         nc4_files = []
 
-        for root, _, files in os.walk(EXTRACT_DIR):
+        for root, _, files in os.walk(extract_dir):
 
             for name in files:
 
@@ -498,8 +558,14 @@ async def upload_dataset(
                 ):
                     image_files.append(path)
 
-                elif name.lower().endswith(".nc4"):
+                elif name.lower().endswith(
+                    (".nc", ".nc4")
+                ):
                     nc4_files.append(path)
+
+        # ----------------------------------------------
+        # Detect dataset type
+        # ----------------------------------------------
 
         dataset_type = detect_dataset(
             csv_files,
@@ -507,33 +573,91 @@ async def upload_dataset(
             nc4_files
         )
 
+        # ----------------------------------------------
+        # Save dataset DB
+        # ----------------------------------------------
+
+        insert_dataset(
+            user_id=current_user["id"],
+            dataset_name=file.filename,
+            dataset_type=dataset_type,
+            file_path=extract_dir,
+            file_size_mb=size_mb
+        )
+
+        # ----------------------------------------------
+        # Result
+        # ----------------------------------------------
+
         result = {
+
+            "message": "ZIP dataset uploaded",
+
+            "dataset_name": file.filename,
+
             "dataset_type": dataset_type,
+
+            "size_mb": size_mb,
+
             "csv_files": len(csv_files),
+
             "images": len(image_files),
-            "nc4_files": len(nc4_files)
+
+            "nc4_files": len(nc4_files),
+
+            "saved_path": extract_dir
         }
+
+        # ----------------------------------------------
+        # NC4 variable preview
+        # ----------------------------------------------
 
         if nc4_files:
 
-            nc_data = Dataset(nc4_files[0])
+            try:
 
-            variables = list(
-                nc_data.variables.keys()
-            )
+                nc_data = Dataset(
+                    nc4_files[0]
+                )
 
-            nc_data.close()
+                variables = list(
+                    nc_data.variables.keys()
+                )
 
-            result["nc4_variables"] = variables
+                nc_data.close()
+
+                result["nc4_variables"] = variables
+
+            except Exception as e:
+
+                result["nc4_error"] = str(e)
 
         return result
+
+    # ==================================================
+    # INVALID FILE
+    # ==================================================
 
     else:
 
         raise HTTPException(
-            400,
-            "Only CSV or ZIP files supported"
+            status_code=400,
+            detail="Only CSV or ZIP files supported"
         )
+    
+
+@app.get("/my-datasets")
+def my_datasets(
+
+    current_user: dict = Depends(get_current_user)
+
+):
+
+    rows = get_user_datasets(
+        current_user["id"]
+    )
+
+    return rows
 
 
 # ======================================================
