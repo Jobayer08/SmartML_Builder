@@ -121,6 +121,12 @@ def init_db():
     );
     """)
 
+    # Ensure older DB schemas include user_id in api_usage
+    cur.execute("""
+    ALTER TABLE api_usage
+    ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    """)
+
     # ==================================================
     # DATASETS TABLE
     # ==================================================
