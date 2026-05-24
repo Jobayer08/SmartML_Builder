@@ -23,10 +23,8 @@ import json
 
 from netCDF4 import Dataset
 
-from app.preprocessing import (
-    smart_preprocessing,
-    auto_split
-)
+from app.feature_engineering import auto_feature_engineering
+from app.preprocessing import auto_split
 
 from app.ml_engine import train_models
 from app.image_engine import train_labeled_images
@@ -69,6 +67,11 @@ from mlops.dataset_utils import (
 from mlops.db import insert_dataset
 
 from mlops.db import get_user_datasets
+
+from app.dataset_inspector import (
+    inspect_csv,
+    inspect_nc4
+)
 
 
 
@@ -392,6 +395,69 @@ def detect_dataset(
     return "unknown"
 
 
+@app.get("/dataset-info/{dataset_id}")
+def dataset_info(
+
+    dataset_id: int,
+
+    current_user: dict = Depends(
+        get_current_user
+    )
+
+):
+
+    datasets = get_user_datasets(
+        current_user["id"]
+    )
+
+    dataset = None
+
+    for d in datasets:
+        if d["id"] == dataset_id:
+            dataset = d
+            break
+
+    if dataset is None:
+        return {
+            "error": "Dataset not found"
+        }
+
+    path = dataset["file_path"]
+
+    dtype = dataset["dataset_type"]
+
+    # -----------------------------------
+    # CSV
+    # -----------------------------------
+
+    if dtype == "csv":
+        return inspect_csv(path)
+
+    # -----------------------------------
+    # NC4
+    # -----------------------------------
+
+    elif dtype == "nc4":
+        return inspect_nc4(path)
+
+    # -----------------------------------
+    # IMAGE
+    # -----------------------------------
+
+    elif dtype == "image":
+
+        return {
+
+            "type": "image",
+
+            "message": "Image dataset ready"
+        }
+
+    return {
+        "error": "Unsupported dataset"
+    }
+
+
 # ======================================================
 # UPLOAD DATASET
 # ======================================================
@@ -690,10 +756,10 @@ async def feature_engineering(
             low_memory=False
         )
 
-        X, y = smart_preprocessing(
-            df,
-            target_column
-        )
+        fe = auto_feature_engineering(df, target_column)
+        X = fe["X"]
+        y = fe["y"]
+        preprocessor = fe["preprocessor"]
 
         X_train, X_test, y_train, y_test = auto_split(X, y)
 
@@ -732,7 +798,7 @@ async def train_model(
     token: str = Form(...)
 ):
 
-    from mlops.db import insert_model, get_versioned_model_path
+    from mlops.db import insert_model
 
     user = get_current_user(token)
 
@@ -752,7 +818,6 @@ async def train_model(
     if filename.endswith(".csv"):
 
         if not target_column:
-
             raise HTTPException(
                 400,
                 "target_column required"
@@ -767,10 +832,10 @@ async def train_model(
             low_memory=False
         )
 
-        X, y = smart_preprocessing(
-            df,
-            target_column
-        )
+        fe = auto_feature_engineering(df, target_column)
+        X = fe["X"]
+        y = fe["y"]
+        preprocessor = fe["preprocessor"]
 
         X_train, X_test, y_train, y_test = auto_split(X, y)
 
@@ -782,16 +847,19 @@ async def train_model(
             features=list(X.columns),
             target=target_column,
             model_name=model_name,
+            preprocessor=preprocessor,
             user_dir=user_model_dir
         )
 
-        # Save to DB
-        model_path = f"{user_model_dir}/{model_name}_v1.pkl"
+        # Save to DB using saved path returned from training
+        model_path = result.get("optimization", {}).get("saved_as") or f"{user_model_dir}/{model_name}_v1.pkl"
+        version = result.get("optimization", {}).get("version", 1)
+
         insert_model(
             user_id=user_id,
             model_name=model_name,
             model_type="csv",
-            version=1,
+            version=version,
             file_path=model_path
         )
 
@@ -800,7 +868,8 @@ async def train_model(
             "model_name": model_name,
             "target": target_column,
             "user_id": user_id,
-            "training_result": result
+            "training_result": result,
+            "model_path": model_path
         }
 
     # ZIP

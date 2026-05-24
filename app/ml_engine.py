@@ -27,9 +27,29 @@ def detect_problem_type(y):
 
 # Save Model + Metadata
 
-def save_model(model, features, target, model_name):
-    model_path, version = get_versioned_model_path(model_name)
-    joblib.dump(model, model_path)
+def save_model(model, features, target, model_name, preprocessor=None, user_dir=None):
+    """Save model. If preprocessor provided, save dict containing model+preprocessor.
+    If user_dir provided, save into that directory as user-specific model.
+    Returns (model_path, version).
+    """
+
+    if user_dir:
+        os.makedirs(user_dir, exist_ok=True)
+        # user models start with version 1
+        version = 1
+        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+    else:
+        model_path, version = get_versioned_model_path(model_name)
+
+    if preprocessor is not None:
+        joblib.dump({
+            "model": model,
+            "preprocessor": preprocessor,
+            "target": target,
+            "features": features
+        }, model_path)
+    else:
+        joblib.dump(model, model_path)
 
     register_model(
         model_name=model_name,
@@ -69,7 +89,7 @@ def optimize_rf_classifier(model, X, y):
 
 # Train Models (MAIN)
 
-def train_models(X_train, X_test, y_train, y_test, features, target, model_name):
+def train_models(X_train, X_test, y_train, y_test, features, target, model_name, preprocessor=None, user_dir=None):
 
     problem_type = detect_problem_type(y_train)
     results = {}
@@ -125,7 +145,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name)
         best_params = {}
 
     # ========== SAVE ==========
-    model_path, version = save_model(best_model, features, target, model_name)
+    model_path, version = save_model(best_model, features, target, model_name, preprocessor=preprocessor, user_dir=user_dir)
 
     return {
         "problem_type": problem_type,

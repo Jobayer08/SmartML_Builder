@@ -115,28 +115,73 @@ def extract_features(image_path):
 # =========================================================
 # 🔹 CSV PREDICTION
 # =========================================================
-def predict_csv(model_name, data):
+def _find_user_model(user_dir, model_name):
+    if not user_dir or not os.path.exists(user_dir):
+        return None
 
-    model_path = load_model_path(model_name, "csv")
-    meta_path = f"{MODEL_DIR}/{model_name}_meta.json"
+    latest = None
+    latest_v = 0
+    for fn in os.listdir(user_dir):
+        if not fn.endswith('.pkl'):
+            continue
+        if not fn.startswith(model_name + "_v"):
+            continue
+        try:
+            v = int(fn[len(model_name) + 2:-4])
+        except Exception:
+            v = 0
+        if v > latest_v:
+            latest_v = v
+            latest = os.path.join(user_dir, fn)
 
-    model = joblib.load(model_path)
+    return latest
 
-    with open(meta_path) as f:
-        meta = json.load(f)
 
-    required_features = meta["features"]
+def predict_csv(model_name, data, user_dir=None):
 
-    df = pd.DataFrame([data])
-    df = pd.get_dummies(df)
+    # try user-specific model first
+    model_path = _find_user_model(user_dir, model_name) if user_dir else None
 
-    for col in required_features:
-        if col not in df:
-            df[col] = 0
+    if not model_path:
+        model_path = load_model_path(model_name, "csv")
 
-    df = df[required_features]
+    if not model_path:
+        return {"error": f"Model {model_name} not found"}
 
-    pred = model.predict(df)
+    loaded = joblib.load(model_path)
+
+    # If saved as dict with preprocessor
+    if isinstance(loaded, dict) and "model" in loaded:
+        model = loaded["model"]
+        preprocessor = loaded.get("preprocessor")
+
+        df = pd.DataFrame([data])
+
+        if preprocessor is not None:
+            X = preprocessor.transform(df)
+        else:
+            X = pd.get_dummies(df)
+
+        pred = model.predict(X)
+
+    else:
+        # backward compatible: raw model + meta json
+        meta_path = f"{MODEL_DIR}/{model_name}_meta.json"
+        with open(meta_path) as f:
+            meta = json.load(f)
+
+        required_features = meta["features"]
+
+        df = pd.DataFrame([data])
+        df = pd.get_dummies(df)
+
+        for col in required_features:
+            if col not in df:
+                df[col] = 0
+
+        df = df[required_features]
+
+        pred = loaded.predict(df)
 
     log_prediction(
         model_name,
@@ -153,9 +198,15 @@ def predict_csv(model_name, data):
 # =========================================================
 # 🔥 IMAGE PREDICTION
 # =========================================================
-def predict_image(model_name, image_path):
+def predict_image(model_name, image_path, user_dir=None):
+    # prefer user-specific image model if available
+    model_path = _find_user_model(user_dir, model_name) if user_dir else None
+    if not model_path:
+        model_path = load_model_path(model_name, "image")
 
-    model_path = load_model_path(model_name, "image")
+    if not model_path:
+        return {"error": f"Model {model_name} not found"}
+
     data = joblib.load(model_path)
 
     features = extract_features(image_path)
@@ -218,9 +269,10 @@ def predict_image(model_name, image_path):
 # =========================================================
 # 🔥 NC4 PREDICTION (SMART + BACKWARD COMPATIBLE)
 # =========================================================
-def predict_nc4(model_name, file_path):
-
-    model_path = load_model_path(model_name, "nc4")
+def predict_nc4(model_name, file_path, user_dir=None):
+    model_path = _find_user_model(user_dir, model_name) if user_dir else None
+    if not model_path:
+        model_path = load_model_path(model_name, "nc4")
     if not model_path:
         return {"error": f"Model {model_name} not found"}
 

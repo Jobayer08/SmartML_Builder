@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from .feature_engineering import auto_feature_engineering
 
 
 # =============================
@@ -37,69 +38,11 @@ def detect_useless_columns(df):
 # SMART PREPROCESSING
 # =============================
 def smart_preprocessing(df, target_column):
-
-    if target_column not in df.columns:
-        raise ValueError("Target column not found")
-
-    # remove duplicates
-    df = df.drop_duplicates()
-
-    # separate target
-    y = df[target_column]
-    X = df.drop(columns=[target_column])
-
-    # =============================
-    # STEP 1: remove useless columns
-    # =============================
-    useless_cols = detect_useless_columns(X)
-    X = X.drop(columns=useless_cols, errors='ignore')
-
-    # =============================
-    # STEP 2: detect column types
-    # =============================
-    cat_cols = X.select_dtypes(include=["object"]).columns.tolist()
-    num_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-
-    # =============================
-    # STEP 3: handle missing values FIRST
-    # =============================
-    for col in num_cols:
-        X[col] = X[col].fillna(X[col].median())
-
-    for col in cat_cols:
-        X[col] = X[col].fillna("unknown")
-
-    # =============================
-    # STEP 4: smart categorical encoding
-    # =============================
-    low_card_cols = []
-    high_card_cols = []
-
-    for col in cat_cols:
-        if X[col].nunique() < 20:
-            low_card_cols.append(col)
-        else:
-            high_card_cols.append(col)
-
-    # One-hot encoding (low cardinality)
-    if len(low_card_cols) > 0:
-        X = pd.get_dummies(X, columns=low_card_cols, drop_first=True)
-
-    # Label encoding (high cardinality)
-    for col in high_card_cols:
-        le = LabelEncoder()
-        X[col] = le.fit_transform(X[col].astype(str))
-
-    # =============================
-    # STEP 5: scale numeric features
-    # =============================
-    scaler = StandardScaler()
-
-    numeric_cols_after = X.select_dtypes(include=["int64", "float64"]).columns
-
-    X[numeric_cols_after] = scaler.fit_transform(X[numeric_cols_after])
-
-    return X, y
+    """Deprecated wrapper: delegate to auto_feature_engineering and
+    return (X, y) where X is a DataFrame with feature columns.
+    """
+    fe = auto_feature_engineering(df, target_column)
+    return fe["X"], fe["y"]
 
 
 # =============================

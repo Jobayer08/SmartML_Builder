@@ -58,13 +58,23 @@ def get_versioned_model_path(model_name):
 # ---------------------------------------------------
 # 📝 REGISTER MODEL INTO DATABASE
 # ---------------------------------------------------
-def register_model(model_name, model_type, version):
+def register_model(model_name, model_type, version, user_id=None, file_path=None):
+    """Register model. If `user_id` and `file_path` are provided, insert into DB.
+    Otherwise return registration metadata only (useful for system/global models).
+    """
 
-    insert_model(
-        model_name=model_name,
-        model_type=model_type,
-        version=version
-    )
+    if user_id is not None and file_path is not None:
+        try:
+            insert_model(
+                user_id=user_id,
+                model_name=model_name,
+                model_type=model_type,
+                version=version,
+                file_path=file_path
+            )
+        except Exception:
+            # Don't fail registration on DB insert issues; caller can handle logging
+            pass
 
     return {
         "status": "registered",
