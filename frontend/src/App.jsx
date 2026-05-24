@@ -3,28 +3,37 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
-import TrainModel from './pages/TrainModel'
-import PredictCSV from './pages/PredictCSV'
-import PredictImage from './pages/PredictImage'
-import PredictNC4 from './pages/PredictNC4'
+import Datasets from './pages/Datasets'
+import Models from './pages/Models'
+import Train from './pages/Train'
+import Predict from './pages/Predict'
+import History from './pages/History'
+import ProtectedRoute from './components/ProtectedRoute'
 import Navbar from './components/Navbar'
+import Sidebar from './components/Sidebar'
 
 export default function App(){
   const token = localStorage.getItem('token')
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Routes>
-        <Route path="/login" element={<Login/>} />
-        <Route path="/register" element={<Register/>} />
-        <Route path="/dashboard" element={token ? <Dashboard/> : <Navigate to="/login" />} />
-        <Route path="/train" element={token ? <TrainModel/> : <Navigate to="/login" />} />
-        <Route path="/predict/csv" element={token ? <PredictCSV/> : <Navigate to="/login" />} />
-        <Route path="/predict/image" element={token ? <PredictImage/> : <Navigate to="/login" />} />
-        <Route path="/predict/nc4" element={token ? <PredictNC4/> : <Navigate to="/login" />} />
-        <Route path="/" element={<Navigate to={token ? '/dashboard' : '/login'} />} />
-      </Routes>
+      {token && <Navbar />}
+      <div className="flex">
+        {token && <Sidebar />}
+        <div className="flex-1">
+          <Routes>
+            <Route path="/login" element={<Login/>} />
+            <Route path="/register" element={<Register/>} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard/></ProtectedRoute>} />
+            <Route path="/datasets" element={<ProtectedRoute><Datasets/></ProtectedRoute>} />
+            <Route path="/models" element={<ProtectedRoute><Models/></ProtectedRoute>} />
+            <Route path="/train" element={<ProtectedRoute><Train/></ProtectedRoute>} />
+            <Route path="/predict" element={<ProtectedRoute><Predict/></ProtectedRoute>} />
+            <Route path="/history" element={<ProtectedRoute><History/></ProtectedRoute>} />
+            <Route path="/" element={<Navigate to={token ? '/dashboard' : '/login'} />} />
+          </Routes>
+        </div>
+      </div>
     </div>
   )
 }

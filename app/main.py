@@ -8,6 +8,7 @@ from fastapi import (
     Depends
 )
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 
@@ -80,6 +81,15 @@ from app.dataset_inspector import (
 # ======================================================
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 init_db()
 

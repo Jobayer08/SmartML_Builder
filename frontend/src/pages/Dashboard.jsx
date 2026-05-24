@@ -1,50 +1,54 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import API from '../api/api'
 
 export default function Dashboard(){
-  const [stats, setStats] = useState({})
+  const [stats, setStats] = useState({ total_models: 0, total_predictions: 0 })
   const [datasets, setDatasets] = useState([])
 
-  useEffect(()=>{
-    const fetchData = async ()=>{
-      try{
-        const a = await API.get('/dashboard-stats')
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
         const d = await API.get('/my-datasets')
-        setStats(a.data)
-        setDatasets(d.data)
-      }catch(e){
-        // ignore
+        setDatasets(d.data || [])
+      } catch (e) {
+        console.log('Error fetching datasets')
       }
     }
     fetchData()
-  },[])
+  }, [])
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+    <div className="p-8">
+      <h1 className="text-4xl font-bold mb-8">SmartML Builder</h1>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="p-5 shadow rounded bg-white">
-          <h3>Total Models</h3>
-          <p className="text-2xl">{stats.total_models ?? '-'}</p>
+      <div className="grid grid-cols-3 gap-5 mb-8">
+        <div className="shadow p-6 rounded bg-white border-l-4 border-blue-500">
+          <h2 className="text-lg font-bold text-gray-600">Models</h2>
+          <p className="text-4xl font-bold mt-2">{stats.total_models}</p>
         </div>
-        <div className="p-5 shadow rounded bg-white">
-          <h3>Total Predictions</h3>
-          <p className="text-2xl">{stats.total_predictions ?? '-'}</p>
+
+        <div className="shadow p-6 rounded bg-white border-l-4 border-green-500">
+          <h2 className="text-lg font-bold text-gray-600">Predictions</h2>
+          <p className="text-4xl font-bold mt-2">{stats.total_predictions}</p>
         </div>
-        <div className="p-5 shadow rounded bg-white">
-          <h3>Datasets</h3>
-          <p className="text-2xl">{datasets.length}</p>
+
+        <div className="shadow p-6 rounded bg-white border-l-4 border-purple-500">
+          <h2 className="text-lg font-bold text-gray-600">Datasets</h2>
+          <p className="text-4xl font-bold mt-2">{datasets.length}</p>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded shadow">
-        <h2 className="font-bold mb-3">Uploaded Datasets</h2>
-        <ul>
-          {datasets.map(ds=> (
-            <li key={ds.id} className="border-b py-2">{ds.dataset_name} — {ds.dataset_type}</li>
-          ))}
-        </ul>
+      <div className="grid grid-cols-3 gap-4">
+        <Link to="/datasets" className="shadow p-4 rounded bg-gradient-to-br from-blue-400 to-blue-600 text-white text-center font-bold hover:shadow-lg">
+          📊 Datasets
+        </Link>
+        <Link to="/train" className="shadow p-4 rounded bg-gradient-to-br from-green-400 to-green-600 text-white text-center font-bold hover:shadow-lg">
+          🚀 Train Model
+        </Link>
+        <Link to="/predict" className="shadow p-4 rounded bg-gradient-to-br from-purple-400 to-purple-600 text-white text-center font-bold hover:shadow-lg">
+          🔮 Predict
+        </Link>
       </div>
     </div>
   )
