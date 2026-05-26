@@ -9,7 +9,8 @@ export default function Dashboard(){
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const d = await API.get('/my-datasets')
+        const token = localStorage.getItem('token')
+        const d = await API.get(`/my-datasets?token=${token}`)
         setDatasets(d.data || [])
       } catch (e) {
         console.log('Error fetching datasets')

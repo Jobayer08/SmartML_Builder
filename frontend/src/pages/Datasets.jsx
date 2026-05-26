@@ -12,7 +12,8 @@ export default function Datasets(){
 
   const fetchDatasets = async () => {
     try {
-      const res = await API.get('/my-datasets')
+      const token = localStorage.getItem('token')
+      const res = await API.get(`/my-datasets?token=${token}`)
       setDatasets(res.data || [])
     } catch (e) {
       console.log('Error fetching datasets')
@@ -23,8 +24,10 @@ export default function Datasets(){
     if (!file) return
     const fd = new FormData()
     fd.append('file', file)
+    // backend expects token as query param for this endpoint
+    const token = localStorage.getItem('token')
     try {
-      await API.post('/upload-dataset/', fd)
+      await API.post(`/upload-dataset/?token=${token}`, fd)
       setFile(null)
       fetchDatasets()
     } catch (e) {

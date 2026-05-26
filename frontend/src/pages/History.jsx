@@ -8,7 +8,8 @@ export default function History(){
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await API.get('/predictions/')
+        const token = localStorage.getItem('token')
+        const res = await API.get(`/my-predictions?token=${token}`)
         setPredictions(res.data || [])
       } catch (e) {
         console.error('Failed to fetch predictions')

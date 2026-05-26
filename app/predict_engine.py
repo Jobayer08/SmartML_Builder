@@ -137,7 +137,7 @@ def _find_user_model(user_dir, model_name):
     return latest
 
 
-def predict_csv(model_name, data, user_dir=None):
+def predict_csv(model_name, data, user_dir=None, user_id=None):
 
     # try user-specific model first
     model_path = _find_user_model(user_dir, model_name) if user_dir else None
@@ -186,7 +186,8 @@ def predict_csv(model_name, data, user_dir=None):
     log_prediction(
         model_name,
         "csv",
-        pred.tolist()
+        pred.tolist(),
+        user_id=user_id
     )
 
     return {
@@ -198,7 +199,7 @@ def predict_csv(model_name, data, user_dir=None):
 # =========================================================
 # 🔥 IMAGE PREDICTION
 # =========================================================
-def predict_image(model_name, image_path, user_dir=None):
+def predict_image(model_name, image_path, user_dir=None, user_id=None):
     # prefer user-specific image model if available
     model_path = _find_user_model(user_dir, model_name) if user_dir else None
     if not model_path:
@@ -222,7 +223,8 @@ def predict_image(model_name, image_path, user_dir=None):
         log_prediction(
             model_name,
             "image_classification",
-            str(pred)
+            str(pred),
+            user_id=user_id
         )
 
         return {
@@ -241,7 +243,8 @@ def predict_image(model_name, image_path, user_dir=None):
         log_prediction(
             model_name,
             "image_cluster",
-            int(pred)
+            int(pred),
+            user_id=user_id
         )
 
         return {
@@ -257,7 +260,8 @@ def predict_image(model_name, image_path, user_dir=None):
         log_prediction(
             model_name,
             "image_cluster",
-            int(pred)
+            int(pred),
+            user_id=user_id
         )
 
         return {
@@ -321,7 +325,8 @@ def predict_nc4(model_name, file_path, user_dir=None):
         log_prediction(
             model_name,
             "nc4",
-            pred[:10].tolist()
+            pred[:10].tolist(),
+            user_id=user_id
         )
 
         return {
@@ -385,7 +390,8 @@ def predict_nc4(model_name, file_path, user_dir=None):
         log_prediction(
             model_name,
             "nc4",
-            pred[:10].tolist()
+            pred[:10].tolist(),
+            user_id=user_id
         )
 
         return {

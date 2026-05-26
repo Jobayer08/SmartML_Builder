@@ -9,11 +9,12 @@ from mlops.db import (
 # ---------------------------------------------------
 # 📦 LOG PREDICTION
 # ---------------------------------------------------
-def log_prediction(model_name, input_type, prediction):
+def log_prediction(model_name, input_type, prediction, user_id=None):
 
     try:
 
         insert_prediction(
+            user_id=user_id,
             model_name=model_name,
             input_type=input_type,
             prediction=prediction
@@ -34,11 +35,11 @@ def log_prediction(model_name, input_type, prediction):
 # ---------------------------------------------------
 # 🌐 LOG API USAGE
 # ---------------------------------------------------
-def log_api(endpoint):
+def log_api(endpoint, user_id=None):
 
     try:
 
-        insert_api_usage(endpoint)
+        insert_api_usage(endpoint, user_id=user_id)
 
         return {
             "status": "logged"

@@ -8,7 +8,8 @@ export default function Models(){
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await API.get('/my-models')
+        const token = localStorage.getItem('token')
+        const res = await API.get(`/my-models?token=${token}`)
         setModels(res.data || [])
       } catch (e) {
         console.log('Error fetching models')

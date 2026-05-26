@@ -57,7 +57,11 @@ from app.auth import (
     hash_password,
     verify_password,
     create_access_token,
-    get_current_user
+    get_current_user as get_current_user_from_token
+)
+from app.dependencies import (
+    get_current_user,
+    resolve_user_from_request
 )
 
 from mlops.dataset_utils import (
@@ -126,9 +130,13 @@ async def track_api_requests(
 
     if request.url.path not in ignored:
 
+        current_user = await resolve_user_from_request(request)
+        user_id = current_user["id"] if current_user else None
+
         log_api_usage(
             endpoint=request.url.path,
-            method=request.method
+            method=request.method,
+            user_id=user_id
         )
 
     return response
@@ -231,7 +239,7 @@ def my_models(token: str):
 
     from mlops.db import get_user_models
 
-    user = get_current_user(token)
+    user = get_current_user_from_token(token)
 
     if not user:
         raise HTTPException(
@@ -264,7 +272,7 @@ def my_models(token: str):
 @app.get("/my-profile")
 def my_profile(token: str):
 
-    user = get_current_user(token)
+    user = get_current_user_from_token(token)
 
     if not user:
 
@@ -476,10 +484,27 @@ def dataset_info(
 async def upload_dataset(
 
     file: UploadFile = File(...),
-
-    current_user: dict = Depends(get_current_user)
+    token: str = Form(None),
+    request: Request = None
 
 ):
+
+    # support token in form, query string, or Authorization header
+    user = None
+
+    if not token and request:
+        token = request.query_params.get("token")
+
+    if token:
+        user = get_current_user_from_token(token)
+    else:
+        auth = request.headers.get("authorization") if request else None
+        if auth:
+            token_str = auth.replace("Bearer ", "")
+            user = get_current_user_from_token(token_str)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     filename = file.filename.lower()
 
@@ -489,7 +514,7 @@ async def upload_dataset(
 
     user_dataset_dir = os.path.join(
         "datasets",
-        f"user_{current_user['id']}"
+        f"user_{user['id']}"
     )
 
     os.makedirs(
@@ -548,7 +573,7 @@ async def upload_dataset(
 
         # save dataset info in DB
         insert_dataset(
-            user_id=current_user["id"],
+            user_id=user["id"],
             dataset_name=file.filename,
             dataset_type="csv",
             file_path=saved_file_path,
@@ -654,7 +679,7 @@ async def upload_dataset(
         # ----------------------------------------------
 
         insert_dataset(
-            user_id=current_user["id"],
+            user_id=user["id"],
             dataset_name=file.filename,
             dataset_type=dataset_type,
             file_path=extract_dir,
@@ -723,15 +748,25 @@ async def upload_dataset(
     
 
 @app.get("/my-datasets")
-def my_datasets(
-
-    current_user: dict = Depends(get_current_user)
-
-):
+def my_datasets(current_user: dict = Depends(get_current_user)):
 
     rows = get_user_datasets(
         current_user["id"]
     )
+
+    return rows
+
+
+# ======================================================
+# MY PREDICTIONS
+# ======================================================
+
+@app.get("/my-predictions")
+def my_predictions(current_user: dict = Depends(get_current_user)):
+
+    from mlops.db import get_user_predictions
+
+    rows = get_user_predictions(current_user["id"])
 
     return rows
 
@@ -805,12 +840,26 @@ async def train_model(
     file: UploadFile = File(...),
     target_column: str = Form(None),
     model_name: str = Form("default_model"),
-    token: str = Form(...)
+    token: str = Form(None),
+    request: Request = None
 ):
 
     from mlops.db import insert_model
 
-    user = get_current_user(token)
+    if not token and request:
+        token = request.query_params.get("token")
+
+    user = None
+    if token:
+        user = get_current_user_from_token(token)
+    else:
+        auth = request.headers.get("authorization") if request else None
+        if auth:
+            token_str = auth.replace("Bearer ", "")
+            user = get_current_user_from_token(token_str)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     if not user:
         raise HTTPException(
@@ -1035,7 +1084,7 @@ async def predict_csv_api(
 
     log_api("/predict-csv/")
 
-    user = get_current_user(input.token)
+    user = get_current_user_from_token(input.token)
 
     if not user:
         raise HTTPException(
@@ -1058,7 +1107,8 @@ async def predict_csv_api(
     return predict_csv(
         input.model_name,
         input.data,
-        user_dir=f"{MODEL_DIR}/user_{user['id']}"
+        user_dir=f"{MODEL_DIR}/user_{user['id']}",
+        user_id=user['id']
     )
 
 
@@ -1070,14 +1120,25 @@ async def predict_csv_api(
 async def predict_image_api(
     model_name: str = Form(...),
     file: UploadFile = File(...),
-    token: str = Form(...)
+    token: str = Form(None),
+    request: Request = None
 ):
 
     from mlops.db import get_model_by_name
 
     log_api("/predict-image/")
 
-    user = get_current_user(token)
+    if not token and request:
+        token = request.query_params.get("token")
+
+    user = None
+    if token:
+        user = get_current_user_from_token(token)
+    else:
+        auth = request.headers.get("authorization") if request else None
+        if auth:
+            token_str = auth.replace("Bearer ", "")
+            user = get_current_user_from_token(token_str)
 
     if not user:
         raise HTTPException(
@@ -1105,7 +1166,8 @@ async def predict_image_api(
     return predict_image(
         model_name,
         path,
-        user_dir=f"{MODEL_DIR}/user_{user['id']}"
+        user_dir=f"{MODEL_DIR}/user_{user['id']}",
+        user_id=user['id']
     )
 
 

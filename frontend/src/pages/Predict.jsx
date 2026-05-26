@@ -12,7 +12,8 @@ export default function Predict(){
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await API.get('/my-models/')
+        const token = localStorage.getItem('token')
+        const res = await API.get(`/my-models/?token=${token}`)
         setModels(res.data || [])
       } catch (e) {
         console.error('Failed to fetch models')
