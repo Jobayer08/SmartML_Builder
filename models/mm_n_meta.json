@@ -1,0 +1,14 @@
+{
+    "model_name": "mm_n",
+    "target": "lon",
+    "features": [
+        "lat",
+        "var"
+    ],
+    "samples": 360,
+    "units": {
+        "lon": "degrees_east",
+        "lat": "degrees_north",
+        "var": "unknown"
+    }
+}

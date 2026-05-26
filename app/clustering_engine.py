@@ -41,7 +41,7 @@ def extract_features(img_path):
 
 # IMAGE CLUSTERING
 
-def cluster_images(data_dir, model_name="image_cluster"):
+def cluster_images(data_dir, model_name="image_cluster", user_dir=None):
     """
     Cluster unlabeled images using K-means on CNN features.
     Handles nested directory structures recursively.
@@ -84,7 +84,12 @@ def cluster_images(data_dir, model_name="image_cluster"):
     for path, label in zip(image_paths, labels):
         cluster_examples[int(label)].append(path)
 
-    model_path, version = get_versioned_model_path(f"{model_name}_cluster")
+    if user_dir:
+        os.makedirs(user_dir, exist_ok=True)
+        version = 1
+        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+    else:
+        model_path, version = get_versioned_model_path(f"{model_name}_cluster")
 
     joblib.dump({
         "model": kmeans,

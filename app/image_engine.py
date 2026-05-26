@@ -55,7 +55,7 @@ def detect_image_dataset_type(dataset_path):
 # ----------------------------------------
 # LABELED IMAGE → CLASSIFICATION
 # ----------------------------------------
-def train_labeled_images(dataset_path, model_name="image_classifier"):
+def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=None):
 
     X, y, classes = [], [], []
 
@@ -83,7 +83,12 @@ def train_labeled_images(dataset_path, model_name="image_classifier"):
     clf = RandomForestClassifier(n_estimators=100)
     clf.fit(X, y)
 
-    model_path, version = get_versioned_model_path(f"{model_name}_image")
+    if user_dir:
+        os.makedirs(user_dir, exist_ok=True)
+        version = 1
+        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+    else:
+        model_path, version = get_versioned_model_path(f"{model_name}_image")
 
     joblib.dump({
         "model": clf,

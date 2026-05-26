@@ -63,7 +63,7 @@ def extract_feature(var_data):
 # =============================
 # 🧠 SMART TRAIN FUNCTION
 # =============================
-def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
+def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_dir=None):
 
     ds = Dataset(file_path, "r")
 
@@ -178,7 +178,12 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model"):
         "dimensions": dimensions
     }
 
-    model_path, version = get_versioned_model_path(f"{model_name}_nc4")
+    if user_dir:
+        os.makedirs(user_dir, exist_ok=True)
+        version = 1
+        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+    else:
+        model_path, version = get_versioned_model_path(f"{model_name}_nc4")
     joblib.dump(model_data, model_path)
 
     register_model(

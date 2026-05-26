@@ -402,6 +402,28 @@ def insert_prediction(
     conn.close()
 
 
+def get_api_usage(user_id):
+
+    conn = get_conn()
+    cur = conn.cursor(
+        cursor_factory=RealDictCursor
+    )
+
+    cur.execute("""
+    SELECT *
+    FROM api_usage
+    WHERE user_id=%s
+    ORDER BY created_at DESC;
+    """, (user_id,))
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+
 def get_user_predictions(user_id):
 
     conn = get_conn()

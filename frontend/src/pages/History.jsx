@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import API from '../api/api'
+import PredictionCard from '../components/PredictionCard'
 
 export default function History(){
   const [predictions, setPredictions] = useState([])
@@ -19,31 +20,58 @@ export default function History(){
     fetchHistory()
   }, [])
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>
+  if (loading) {
+    return (
+      <div className="ml-64 p-8 pt-24 min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-blue-600 font-medium">Loading prediction history...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Prediction History</h1>
+    <div className="ml-64 p-8 pt-24 min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+          📜 Prediction History
+        </h1>
+        <p className="text-blue-500 mt-2">View all your past model predictions</p>
+      </div>
 
       {predictions.length === 0 ? (
-        <div className="bg-gray-50 p-8 rounded text-center">
-          <p className="text-gray-600">No predictions yet</p>
+        <div className="bg-gradient-to-br from-blue-50/80 to-white rounded-xl shadow-md border border-blue-200 p-12 text-center">
+          <div className="text-6xl mb-4">🔮</div>
+          <p className="text-blue-600 text-lg font-medium mb-2">No predictions yet</p>
+          <p className="text-blue-400">Make your first prediction to see it here</p>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {predictions.map((pred) => (
-            <div key={pred.id} className="bg-white p-4 rounded border border-gray-200">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-lg">{pred.model_name}</h3>
-                <span className="text-xs text-gray-500">{new Date(pred.created_at).toLocaleString()}</span>
+        <>
+          {/* Stats Summary */}
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 mb-6">
+            <div className="flex justify-between items-center text-white">
+              <div>
+                <p className="text-blue-100 text-sm">Total Predictions</p>
+                <p className="text-3xl font-bold">{predictions.length}</p>
               </div>
-              <div className="text-sm space-y-1">
-                <p><strong>Prediction:</strong> {JSON.stringify(pred.prediction)}</p>
-                {pred.confidence && <p><strong>Confidence:</strong> {(pred.confidence * 100).toFixed(2)}%</p>}
+              <div className="text-right">
+                <p className="text-blue-100 text-sm">Last Prediction</p>
+                <p className="font-medium">
+                  {new Date(predictions[0]?.created_at).toLocaleDateString()}
+                </p>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+
+          {/* Predictions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {predictions.map((pred) => (
+              <PredictionCard key={pred.id} prediction={pred} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

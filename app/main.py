@@ -234,6 +234,24 @@ def login(data: LoginRequest):
 # MY MODELS
 # ======================================================
 
+def get_model_accuracy(user_id, model_name):
+    paths = [
+        os.path.join(MODEL_DIR, f"user_{user_id}", f"{model_name}_meta.json"),
+        os.path.join(MODEL_DIR, f"{model_name}_meta.json")
+    ]
+
+    for path in paths:
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    data = json.load(f)
+                return data.get("accuracy")
+            except Exception:
+                continue
+
+    return None
+
+
 @app.get("/my-models")
 def my_models(token: str):
 
@@ -255,7 +273,8 @@ def my_models(token: str):
             "id": m["id"],
             "model_name": m["model_name"],
             "model_type": m["model_type"],
-            "created_at": m["created_at"]
+            "created_at": m["created_at"],
+            "accuracy": get_model_accuracy(user["id"], m["model_name"])
         })
 
     return {
@@ -602,6 +621,36 @@ async def upload_dataset(
         }
 
     # ==================================================
+    # NC4 DATASET
+    # ==================================================
+
+    elif filename.endswith((".nc4", ".nc")):
+
+        try:
+            nc_data = Dataset(saved_file_path)
+            variables = list(nc_data.variables.keys())
+            nc_data.close()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid NC4 file: {e}")
+
+        insert_dataset(
+            user_id=user["id"],
+            dataset_name=file.filename,
+            dataset_type="nc4",
+            file_path=saved_file_path,
+            file_size_mb=size_mb
+        )
+
+        return {
+            "message": "NC4 dataset uploaded",
+            "dataset_name": file.filename,
+            "dataset_type": "nc4",
+            "size_mb": size_mb,
+            "variables": variables,
+            "saved_path": saved_file_path
+        }
+
+    # ==================================================
     # ZIP DATASET
     # ==================================================
 
@@ -767,6 +816,16 @@ def my_predictions(current_user: dict = Depends(get_current_user)):
     from mlops.db import get_user_predictions
 
     rows = get_user_predictions(current_user["id"])
+
+    return rows
+
+
+@app.get("/api-usage")
+def api_usage(current_user: dict = Depends(get_current_user)):
+
+    from mlops.db import get_api_usage
+
+    rows = get_api_usage(current_user["id"])
 
     return rows
 
@@ -1178,10 +1237,44 @@ async def predict_image_api(
 @app.post("/predict-nc4/")
 async def predict_nc4_api(
     model_name: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    token: str = Form(None),
+    request: Request = None
 ):
 
+    from mlops.db import get_model_by_name
+
     log_api("/predict-nc4/")
+
+    if not token and request:
+        token = request.query_params.get("token")
+
+    user = None
+    if token:
+        user = get_current_user_from_token(token)
+    else:
+        auth = request.headers.get("authorization") if request else None
+        if auth:
+            token_str = auth.replace("Bearer ", "")
+            user = get_current_user_from_token(token_str)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    # Check if user owns this model
+    model = get_model_by_name(
+        user["id"],
+        model_name
+    )
+
+    if not model:
+        raise HTTPException(
+            status_code=403,
+            detail="Model not found or access denied"
+        )
 
     path = f"{UPLOAD_DIR}/{file.filename}"
 
@@ -1190,5 +1283,7 @@ async def predict_nc4_api(
 
     return predict_nc4(
         model_name,
-        path
+        path,
+        user_dir=f"{MODEL_DIR}/user_{user['id']}" ,
+        user_id=user["id"]
     )

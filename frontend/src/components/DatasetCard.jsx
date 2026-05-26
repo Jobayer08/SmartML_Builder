@@ -1,20 +1,22 @@
-export default function DatasetCard({ dataset, onDelete }){
+export default function DatasetCard({ dataset }) {
   return (
-    <div className="bg-white p-4 rounded shadow hover:shadow-lg transition">
-      <h3 className="font-bold text-lg mb-2">{dataset.dataset_name}</h3>
-      <div className="text-sm text-gray-600 space-y-1">
-        <p><strong>Type:</strong> {dataset.file_type}</p>
-        <p><strong>Uploaded:</strong> {new Date(dataset.created_at).toLocaleDateString()}</p>
-        <p><strong>Size:</strong> {(dataset.file_size / 1024).toFixed(2)} KB</p>
+    <div className="bg-gradient-to-br from-blue-50/80 to-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-blue-100 hover:border-blue-300 hover:scale-[1.02] group">
+      <div className="p-5">
+        <h3 className="font-bold text-lg mb-2 text-blue-800 group-hover:text-blue-600 transition-colors">
+          {dataset.dataset_name}
+        </h3>
+        <div className="text-sm space-y-1.5">
+          <p className="text-gray-600">
+            <span className="font-semibold text-blue-600">📊 Type:</span> {dataset.dataset_type || 'Unknown'}
+          </p>
+          <p className="text-gray-600">
+            <span className="font-semibold text-blue-600">📅 Uploaded:</span> {new Date(dataset.created_at).toLocaleDateString()}
+          </p>
+          <p className="text-gray-600">
+            <span className="font-semibold text-blue-600">💾 Size:</span> {dataset.file_size_mb ? `${dataset.file_size_mb.toFixed(2)} MB` : 'N/A'}
+          </p>
+        </div>
       </div>
-      {onDelete && (
-        <button 
-          onClick={() => onDelete(dataset.id)}
-          className="mt-3 text-red-600 text-sm hover:text-red-800 font-bold"
-        >
-          Delete
-        </button>
-      )}
     </div>
-  )
+  );
 }

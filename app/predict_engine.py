@@ -273,7 +273,7 @@ def predict_image(model_name, image_path, user_dir=None, user_id=None):
 # =========================================================
 # 🔥 NC4 PREDICTION (SMART + BACKWARD COMPATIBLE)
 # =========================================================
-def predict_nc4(model_name, file_path, user_dir=None):
+def predict_nc4(model_name, file_path, user_dir=None, user_id=None):
     model_path = _find_user_model(user_dir, model_name) if user_dir else None
     if not model_path:
         model_path = load_model_path(model_name, "nc4")

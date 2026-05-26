@@ -27,7 +27,7 @@ def detect_problem_type(y):
 
 # Save Model + Metadata
 
-def save_model(model, features, target, model_name, preprocessor=None, user_dir=None):
+def save_model(model, features, target, model_name, preprocessor=None, user_dir=None, accuracy=None):
     """Save model. If preprocessor provided, save dict containing model+preprocessor.
     If user_dir provided, save into that directory as user-specific model.
     Returns (model_path, version).
@@ -62,7 +62,11 @@ def save_model(model, features, target, model_name, preprocessor=None, user_dir=
         "target": target
     }
 
-    with open(f"{MODEL_DIR}/{model_name}_meta.json", "w") as f:
+    if accuracy is not None:
+        meta["accuracy"] = float(accuracy)
+
+    meta_path = os.path.join(user_dir if user_dir else MODEL_DIR, f"{model_name}_meta.json")
+    with open(meta_path, "w") as f:
         json.dump(meta, f)
 
     return model_path, version
@@ -145,7 +149,15 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name,
         best_params = {}
 
     # ========== SAVE ==========
-    model_path, version = save_model(best_model, features, target, model_name, preprocessor=preprocessor, user_dir=user_dir)
+    model_path, version = save_model(
+        best_model,
+        features,
+        target,
+        model_name,
+        preprocessor=preprocessor,
+        user_dir=user_dir,
+        accuracy=best_acc if problem_type == "classification" else None
+    )
 
     return {
         "problem_type": problem_type,
