@@ -1,17 +1,19 @@
 import { Link } from 'react-router-dom'
 
 export default function Sidebar(){
-  return (
-    <div className="w-64 bg-gradient-to-b from-blue-600 to-blue-800 text-white min-h-screen p-4">
-      <h1 className="text-2xl font-bold mb-6">SmartML</h1>
-      <nav className="space-y-2">
-        <Link to="/dashboard" className="block px-4 py-2 rounded hover:bg-blue-700 transition">📊 Dashboard</Link>
-        <Link to="/datasets" className="block px-4 py-2 rounded hover:bg-blue-700 transition">📁 Datasets</Link>
-        <Link to="/train" className="block px-4 py-2 rounded hover:bg-blue-700 transition">⚙️ Train Model</Link>
-        <Link to="/models" className="block px-4 py-2 rounded hover:bg-blue-700 transition">🤖 My Models</Link>
-        <Link to="/predict" className="block px-4 py-2 rounded hover:bg-blue-700 transition">🎯 Predict</Link>
-        <Link to="/history" className="block px-4 py-2 rounded hover:bg-blue-700 transition">📈 History</Link>
-      </nav>
+  return(
+    <div className="w-64 h-screen bg-gray-900 text-white fixed">
+      <div className="p-5 text-2xl font-bold border-b border-gray-700">
+        SmartML
+      </div>
+      <div className="flex flex-col p-4 gap-3">
+        <Link to="/dashboard" className="hover:text-gray-300">Dashboard</Link>
+        <Link to="/datasets" className="hover:text-gray-300">Datasets</Link>
+        <Link to="/models" className="hover:text-gray-300">Models</Link>
+        <Link to="/train" className="hover:text-gray-300">Train</Link>
+        <Link to="/predict" className="hover:text-gray-300">Predict</Link>
+        <Link to="/logs" className="hover:text-gray-300">Logs</Link>
+      </div>
     </div>
   )
 }
