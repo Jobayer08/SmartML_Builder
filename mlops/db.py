@@ -31,7 +31,10 @@ DB_CONFIG = {
 # ======================================================
 
 def get_conn():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(
+        **DB_CONFIG,
+        sslmode="require"
+    )
 
 
 # ======================================================
