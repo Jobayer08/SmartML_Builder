@@ -59,9 +59,57 @@ def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=N
 
     X, y, classes = [], [], []
 
-    for label in os.listdir(dataset_path):
+    # Helper: find the folder with labeled image subfolders by recursively searching
+    def find_label_folders(start_path, depth=0, max_depth=5):
+        """Recursively find the folder containing labeled image subfolders."""
+        if depth > max_depth:
+            return None
+        
+        try:
+            items = os.listdir(start_path)
+        except:
+            return None
+        
+        subfolders = [
+            os.path.join(start_path, item)
+            for item in items
+            if os.path.isdir(os.path.join(start_path, item))
+        ]
+        
+        if not subfolders:
+            return None
+        
+        # Check if ANY subfolder contains images
+        for folder in subfolders:
+            try:
+                image_files = [
+                    f for f in os.listdir(folder)
+                    if os.path.isfile(os.path.join(folder, f)) and 
+                       f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp'))
+                ]
+                if image_files:  # Found a folder with images!
+                    return start_path
+            except:
+                pass
+        
+        # No image folders found at this level.
+        # Recurse into subfolders
+        for folder in subfolders:
+            result = find_label_folders(folder, depth + 1, max_depth)
+            if result is not None:
+                return result
+        
+        # No images found anywhere
+        return None
+    
+    # Find the actual location of labeled image folders
+    search_path = find_label_folders(dataset_path)
+    if search_path is None:
+        search_path = dataset_path
 
-        label_path = os.path.join(dataset_path, label)
+    for label in os.listdir(search_path):
+
+        label_path = os.path.join(search_path, label)
         if not os.path.isdir(label_path):
             continue
 
@@ -85,10 +133,10 @@ def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=N
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        version = 1
-        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+        # Use versioning to avoid overwriting and DB conflicts
+        model_path, version = get_versioned_model_path(model_name, user_dir=user_dir)
     else:
-        model_path, version = get_versioned_model_path(f"{model_name}_image")
+        model_path, version = get_versioned_model_path(model_name)
 
     joblib.dump({
         "model": clf,

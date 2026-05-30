@@ -269,12 +269,25 @@ def my_models(token: str):
 
     result = []
     for m in models:
+        accuracy = get_model_accuracy(user["id"], m["model_name"])
+        
+        # For image and NC4 models, try to read accuracy from meta JSON
+        if not accuracy and m["model_type"] in ["image_labeled", "image_unlabeled", "nc4"]:
+            meta_path = f"models/user_{user['id']}/{m['model_name']}_meta.json"
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path) as f:
+                        meta = json.load(f)
+                        accuracy = meta.get("accuracy")
+                except Exception:
+                    pass
+        
         result.append({
             "id": m["id"],
             "model_name": m["model_name"],
             "model_type": m["model_type"],
             "created_at": m["created_at"],
-            "accuracy": get_model_accuracy(user["id"], m["model_name"])
+            "accuracy": accuracy
         })
 
     return {
@@ -903,7 +916,7 @@ async def train_model(
     request: Request = None
 ):
 
-    from mlops.db import insert_model
+    from mlops.db import insert_model, get_next_version
 
     if not token and request:
         token = request.query_params.get("token")
@@ -969,9 +982,17 @@ async def train_model(
             user_dir=user_model_dir
         )
 
-        # Save to DB using saved path returned from training
+        # Use the actual path that save_model created
         model_path = result.get("optimization", {}).get("saved_as") or f"{user_model_dir}/{model_name}_v1.pkl"
         version = result.get("optimization", {}).get("version", 1)
+
+        # Ensure model file actually exists before inserting to DB
+        if not os.path.exists(model_path):
+            return {
+                "error": "Model file not found after training",
+                "expected_path": model_path,
+                "training_result": result
+            }
 
         insert_model(
             user_id=user_id,
@@ -1049,12 +1070,23 @@ async def train_model(
                 user_dir=user_model_dir
             )
 
+            version = result.get("version", 1)
+            model_path = result.get("model_saved", f"{user_model_dir}/{model_name}_v{version}.pkl")
+
+            # Ensure model file exists before inserting DB record
+            if not os.path.exists(model_path):
+                return {
+                    "error": "Model file not found after image_labeled training",
+                    "expected_path": model_path,
+                    "result": result
+                }
+
             insert_model(
                 user_id=user_id,
                 model_name=model_name,
                 model_type="image_labeled",
-                version=1,
-                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+                version=version,
+                file_path=model_path
             )
 
             return {
@@ -1072,12 +1104,23 @@ async def train_model(
                 user_dir=user_model_dir
             )
 
+            version = result.get("version", 1)
+            model_path = result.get("model_saved_path", f"{user_model_dir}/{model_name}_v{version}.pkl")
+
+            # Ensure model file exists before inserting DB record
+            if not os.path.exists(model_path):
+                return {
+                    "error": "Model file not found after image_unlabeled training",
+                    "expected_path": model_path,
+                    "result": result
+                }
+
             insert_model(
                 user_id=user_id,
                 model_name=model_name,
                 model_type="image_unlabeled",
-                version=1,
-                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+                version=version,
+                file_path=model_path
             )
 
             return {
@@ -1096,12 +1139,23 @@ async def train_model(
                 user_dir=user_model_dir
             )
 
+            version = result.get("version", 1)
+            model_path = result.get("model_saved", f"{user_model_dir}/{model_name}_v{version}.pkl")
+
+            # Ensure model file exists before inserting DB record
+            if not os.path.exists(model_path):
+                return {
+                    "error": "Model file not found after nc4 training",
+                    "expected_path": model_path,
+                    "result": result
+                }
+
             insert_model(
                 user_id=user_id,
                 model_name=model_name,
                 model_type="nc4",
-                version=1,
-                file_path=f"{user_model_dir}/{model_name}_v1.pkl"
+                version=version,
+                file_path=model_path
             )
 
             return {

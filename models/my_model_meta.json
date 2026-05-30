@@ -1,9 +1,9 @@
 {
     "model_name": "my_model",
-    "target": "var",
+    "target": "lon",
     "features": [
-        "lon",
-        "lat"
+        "lat",
+        "var"
     ],
     "samples": 360,
     "units": {

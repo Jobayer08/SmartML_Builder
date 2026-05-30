@@ -180,10 +180,10 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        version = 1
-        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+        # Use versioning to avoid overwriting and DB conflicts
+        model_path, version = get_versioned_model_path(model_name, user_dir=user_dir)
     else:
-        model_path, version = get_versioned_model_path(f"{model_name}_nc4")
+        model_path, version = get_versioned_model_path(model_name)
     joblib.dump(model_data, model_path)
 
     register_model(

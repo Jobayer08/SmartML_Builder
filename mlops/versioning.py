@@ -9,14 +9,22 @@ MODEL_DIR = "models"
 # ---------------------------------------------------
 # 🔍 FIND NEXT VERSION
 # ---------------------------------------------------
-def get_next_version(model_name):
+def get_next_version(model_name, search_dir=None):
+    """Find next version number for a model.
+    
+    Args:
+        model_name: Name of the model (without version suffix)
+        search_dir: Directory to search in. If None, defaults to MODEL_DIR
+    """
 
-    if not os.path.exists(MODEL_DIR):
-        os.makedirs(MODEL_DIR)
+    search_path = search_dir or MODEL_DIR
+
+    if not os.path.exists(search_path):
+        os.makedirs(search_path)
 
     versions = []
 
-    for f in os.listdir(MODEL_DIR):
+    for f in os.listdir(search_path):
 
         # example:
         # titanic_v1.pkl
@@ -44,13 +52,26 @@ def get_next_version(model_name):
 # ---------------------------------------------------
 # 💾 GENERATE VERSIONED MODEL PATH
 # ---------------------------------------------------
-def get_versioned_model_path(model_name):
+def get_versioned_model_path(model_name, user_dir=None):
+    """Generate a versioned model path.
+    
+    Args:
+        model_name: Name of the model
+        user_dir: User-specific directory. If provided, path will be in that directory
+        
+    Returns:
+        Tuple of (full_path, version_number)
+    """
 
-    version = get_next_version(model_name)
-
-    filename = f"{model_name}_v{version}.pkl"
-
-    full_path = os.path.join(MODEL_DIR, filename)
+    if user_dir:
+        os.makedirs(user_dir, exist_ok=True)
+        version = get_next_version(model_name, search_dir=user_dir)
+        filename = f"{model_name}_v{version}.pkl"
+        full_path = os.path.join(user_dir, filename)
+    else:
+        version = get_next_version(model_name)
+        filename = f"{model_name}_v{version}.pkl"
+        full_path = os.path.join(MODEL_DIR, filename)
 
     return full_path, version
 

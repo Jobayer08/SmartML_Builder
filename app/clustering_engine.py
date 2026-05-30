@@ -86,10 +86,10 @@ def cluster_images(data_dir, model_name="image_cluster", user_dir=None):
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        version = 1
-        model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
+        # Use versioning to avoid overwriting and DB conflicts
+        model_path, version = get_versioned_model_path(model_name, user_dir=user_dir)
     else:
-        model_path, version = get_versioned_model_path(f"{model_name}_cluster")
+        model_path, version = get_versioned_model_path(model_name)
 
     joblib.dump({
         "model": kmeans,

@@ -5,8 +5,11 @@ export default function Navbar(){
 
   const handleLogout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('user_email')
     navigate('/login')
   }
+
+  const userEmail = localStorage.getItem('user_email') || 'User'
 
   return(
     <nav className="bg-gradient-to-r from-blue-600 to-blue-500 shadow-lg fixed w-full z-20 backdrop-blur-sm">
@@ -19,8 +22,17 @@ export default function Navbar(){
           🧠 SmartML
         </Link>
         
-        {/* Navigation Links */}
-        <div className="flex items-center gap-6 text-white font-medium">
+        {/* User Info & Navigation Links */}
+        <div className="flex items-center gap-8">
+          {/* User Info */}
+          <div className="flex items-center gap-4 text-white text-sm">
+            <span className="text-lg">👤</span>
+            <span className="font-medium">{userEmail}</span>
+            <div className="w-px h-6 bg-white/30"></div>
+          </div>
+          
+          {/* Navigation Links */}
+          <div className="flex items-center gap-6 text-white font-medium">
           <Link 
             to="/dashboard" 
             className="relative px-2 py-1 hover:text-white transition-colors duration-200 group"
@@ -43,6 +55,7 @@ export default function Navbar(){
           >
             🚪 Logout
           </button>
+        </div>
         </div>
       </div>
     </nav>

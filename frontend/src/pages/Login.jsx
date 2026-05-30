@@ -22,6 +22,18 @@ export default function Login(){
       const res = await API.post('/login', { email, password })
       const token = res.data.access_token || res.data.token
       localStorage.setItem('token', token)
+      // Decode token to extract user email and store for navbar display
+      const tokenParts = token.split('.')
+      if (tokenParts.length === 3) {
+        try {
+          const decoded = JSON.parse(atob(tokenParts[1]))
+          if (decoded.email) {
+            localStorage.setItem('user_email', decoded.email)
+          }
+        } catch (e) {
+          // Silent fail on decode
+        }
+      }
       navigate('/dashboard')
     } catch (e) {
       setError(e.response?.data?.detail || 'Login failed. Please check your credentials.')

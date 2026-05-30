@@ -92,17 +92,17 @@ export default function TrainModel(){
             {/* Target Column */}
             <div>
               <label className="block font-bold text-blue-800 mb-2 flex items-center gap-2">
-                🎯 Target Column
-                <span className="text-xs font-normal text-blue-500">(Required)</span>
+                🎯 Target Column / Feature
+                <span className="text-xs font-normal text-blue-500">(Required for CSV/NC4)</span>
               </label>
               <input 
                 className="w-full px-4 py-2 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="e.g., price, label, class, target" 
+                placeholder="e.g., price, label, class, target, yield" 
                 value={target} 
                 onChange={e => setTarget(e.target.value)} 
               />
               <p className="text-xs text-blue-500 mt-1">
-                💡 The column you want to predict
+                💡 CSV: column to predict. NC4: target variable (e.g., yield, temperature). Image/ZIP: optional
               </p>
             </div>
 
@@ -126,7 +126,7 @@ export default function TrainModel(){
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-blue-700 text-sm flex items-start gap-2">
                 <span>💡</span>
-                <span>Make sure your CSV file has headers (column names) and the target column exists in your data.</span>
+                <span>CSV: File must have headers and target column. NC4: Target feature is auto-detected if not provided. ZIP: Can contain labeled images (folders) or NC4 files.</span>
               </p>
             </div>
 

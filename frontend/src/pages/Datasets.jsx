@@ -184,6 +184,46 @@ export default function Datasets(){
                   <p className="mt-2 text-gray-600">{datasetDetails.message}</p>
                 </div>
               )}
+              {datasetDetails.type === 'zip' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">📦 Type:</p>
+                      <p className="text-gray-700">ZIP Archive</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">📊 Dataset Type:</p>
+                      <p className="text-gray-700 capitalize">{datasetDetails.dataset_type}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">📄 CSV Files:</p>
+                      <p className="text-gray-700">{datasetDetails.csv_files || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">🖼️ Images:</p>
+                      <p className="text-gray-700">{datasetDetails.images || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">🌐 NC4 Files:</p>
+                      <p className="text-gray-700">{datasetDetails.nc4_files || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600">📦 Size:</p>
+                      <p className="text-gray-700">{datasetDetails.size_mb?.toFixed(2) || 'N/A'} MB</p>
+                    </div>
+                  </div>
+                  {datasetDetails.nc4_variables && (
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="font-semibold text-blue-600 mb-2">🌐 NC4 Variables:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {datasetDetails.nc4_variables.map((var_name, idx) => (
+                          <span key={idx} className="bg-white px-2 py-1 rounded text-xs text-blue-600 border border-blue-200">{var_name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
