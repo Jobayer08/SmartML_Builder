@@ -131,7 +131,7 @@ export default function Login(){
                   Logging in...
                 </span>
               ) : (
-                '🚀 Login'
+                ' Login'
               )}
             </button>
           </div>

@@ -43,7 +43,7 @@ export default function TrainModel(){
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-          🚀 Train Model
+           Train Model
         </h1>
         <p className="text-blue-500 mt-2">Train a machine learning model on your CSV dataset</p>
       </div>
