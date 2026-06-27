@@ -80,13 +80,11 @@ from app.dataset_inspector import (
 
 
 
-# ======================================================
-# APP
-# ======================================================
+
 
 app = FastAPI()
 
-# Add CORS middleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -102,17 +100,13 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-# ======================================================
-# JWT SETTINGS
-# ======================================================
+
 
 SECRET_KEY = "SMARTML_SECRET_KEY"
 ALGORITHM = "HS256"
 
 
-# ======================================================
-# API TRACKING MIDDLEWARE
-# ======================================================
+
 
 @app.middleware("http")
 async def track_api_requests(
@@ -142,9 +136,7 @@ async def track_api_requests(
     return response
 
 
-# ======================================================
-# DIRECTORIES
-# ======================================================
+
 
 UPLOAD_DIR = "data/uploads"
 EXTRACT_DIR = "data/extracted"
@@ -154,9 +146,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-# ======================================================
-# ROOT
-# ======================================================
+
 
 @app.get("/")
 async def root():
@@ -166,9 +156,7 @@ async def root():
     }
 
 
-# ======================================================
-# REGISTER
-# ======================================================
+
 
 @app.post("/register")
 def register(user: RegisterRequest):
@@ -194,9 +182,7 @@ def register(user: RegisterRequest):
     }
 
 
-# ======================================================
-# LOGIN
-# ======================================================
+
 
 @app.post("/login")
 def login(data: LoginRequest):
@@ -230,9 +216,7 @@ def login(data: LoginRequest):
         "token_type": "bearer"
     }
 
-# ======================================================
-# MY MODELS
-# ======================================================
+
 
 def get_model_accuracy(user_id, model_name):
     paths = [
@@ -271,7 +255,7 @@ def my_models(token: str):
     for m in models:
         accuracy = get_model_accuracy(user["id"], m["model_name"])
         
-        # For image and NC4 models, try to read accuracy from meta JSON
+        
         if not accuracy and m["model_type"] in ["image_labeled", "image_unlabeled", "nc4"]:
             meta_path = f"models/user_{user['id']}/{m['model_name']}_meta.json"
             if os.path.exists(meta_path):
@@ -297,9 +281,7 @@ def my_models(token: str):
     }
 
 
-# ======================================================
-# PROTECTED ROUTE
-# ======================================================
+
 
 @app.get("/my-profile")
 def my_profile(token: str):
@@ -320,9 +302,7 @@ def my_profile(token: str):
     }
 
 
-# ======================================================
-# MODEL REGISTRY
-# ======================================================
+
 
 @app.get("/models/")
 def list_models():
@@ -342,9 +322,7 @@ def list_models():
     }
 
 
-# ======================================================
-# MODEL INFO
-# ======================================================
+
 
 @app.get("/model-info/{model_name}")
 def model_info(model_name: str):
@@ -364,7 +342,7 @@ def model_info(model_name: str):
     with open(meta_path) as f:
         meta = json.load(f)
 
-    # CSV
+    
     if "features" in meta and "target" in meta:
 
         features = meta["features"]
@@ -391,7 +369,7 @@ def model_info(model_name: str):
             "example_input": example
         }
 
-    # NC4
+    
     elif meta.get("dataset_type") == "nc4":
 
         return {
@@ -402,7 +380,7 @@ def model_info(model_name: str):
             "message": "Upload .nc4 file for prediction"
         }
 
-    # IMAGE
+    
     else:
 
         return {
@@ -412,9 +390,7 @@ def model_info(model_name: str):
         }
 
 
-# ======================================================
-# DATASET DETECTOR
-# ======================================================
+
 
 def detect_dataset(
     csv_files,
@@ -476,23 +452,17 @@ def dataset_info(
 
     dtype = dataset["dataset_type"]
 
-    # -----------------------------------
-    # CSV
-    # -----------------------------------
+    
 
     if dtype == "csv":
         return inspect_csv(path)
 
-    # -----------------------------------
-    # NC4
-    # -----------------------------------
+    
 
     elif dtype == "nc4":
         return inspect_nc4(path)
 
-    # -----------------------------------
-    # IMAGE
-    # -----------------------------------
+    
 
     elif dtype == "image":
 
@@ -508,9 +478,7 @@ def dataset_info(
     }
 
 
-# ======================================================
-# UPLOAD DATASET
-# ======================================================
+
 
 @app.post("/upload-dataset/")
 async def upload_dataset(
@@ -521,7 +489,7 @@ async def upload_dataset(
 
 ):
 
-    # support token in form, query string, or Authorization header
+    
     user = None
 
     if not token and request:
@@ -540,9 +508,7 @@ async def upload_dataset(
 
     filename = file.filename.lower()
 
-    # ==================================================
-    # USER DATASET FOLDER
-    # ==================================================
+    
 
     user_dataset_dir = os.path.join(
         "datasets",
@@ -554,9 +520,7 @@ async def upload_dataset(
         exist_ok=True
     )
 
-    # ==================================================
-    # SAVE ORIGINAL FILE
-    # ==================================================
+    
 
     saved_file_path = os.path.join(
         user_dataset_dir,
@@ -566,17 +530,13 @@ async def upload_dataset(
     with open(saved_file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # ==================================================
-    # FILE SIZE
-    # ==================================================
+    
 
     size_mb = get_file_size_mb(
         saved_file_path
     )
 
-    # ==================================================
-    # CSV DATASET
-    # ==================================================
+
 
     if filename.endswith(".csv"):
 
@@ -585,25 +545,25 @@ async def upload_dataset(
             low_memory=False
         )
 
-        # cleaning
+        
         df = df.drop_duplicates()
         df = df.ffill()
 
-        # preview
+        
         preview = (
             df.head(5)
             .replace({np.nan: None})
             .to_dict()
         )
 
-        # summary
+        
         summary = (
             df.describe(include="all")
             .replace({np.nan: None})
             .to_dict()
         )
 
-        # save dataset info in DB
+        
         insert_dataset(
             user_id=user["id"],
             dataset_name=file.filename,
@@ -633,9 +593,7 @@ async def upload_dataset(
             "saved_path": saved_file_path
         }
 
-    # ==================================================
-    # NC4 DATASET
-    # ==================================================
+    
 
     elif filename.endswith((".nc4", ".nc")):
 
@@ -663,15 +621,11 @@ async def upload_dataset(
             "saved_path": saved_file_path
         }
 
-    # ==================================================
-    # ZIP DATASET
-    # ==================================================
+    
 
     elif filename.endswith(".zip"):
 
-        # ----------------------------------------------
-        # Extract dir
-        # ----------------------------------------------
+        
 
         extract_dir = os.path.join(
             user_dataset_dir,
@@ -688,9 +642,7 @@ async def upload_dataset(
             exist_ok=True
         )
 
-        # ----------------------------------------------
-        # Extract ZIP
-        # ----------------------------------------------
+        
 
         with zipfile.ZipFile(
             saved_file_path,
@@ -699,9 +651,7 @@ async def upload_dataset(
 
             zip_ref.extractall(extract_dir)
 
-        # ----------------------------------------------
-        # Detect contents
-        # ----------------------------------------------
+        
 
         csv_files = []
         image_files = []
@@ -726,9 +676,7 @@ async def upload_dataset(
                 ):
                     nc4_files.append(path)
 
-        # ----------------------------------------------
-        # Detect dataset type
-        # ----------------------------------------------
+        
 
         dataset_type = detect_dataset(
             csv_files,
@@ -736,9 +684,7 @@ async def upload_dataset(
             nc4_files
         )
 
-        # ----------------------------------------------
-        # Save dataset DB
-        # ----------------------------------------------
+        
 
         insert_dataset(
             user_id=user["id"],
@@ -748,9 +694,7 @@ async def upload_dataset(
             file_size_mb=size_mb
         )
 
-        # ----------------------------------------------
-        # Result
-        # ----------------------------------------------
+        
 
         result = {
 
@@ -771,9 +715,7 @@ async def upload_dataset(
             "saved_path": extract_dir
         }
 
-        # ----------------------------------------------
-        # NC4 variable preview
-        # ----------------------------------------------
+        
 
         if nc4_files:
 
@@ -797,9 +739,7 @@ async def upload_dataset(
 
         return result
 
-    # ==================================================
-    # INVALID FILE
-    # ==================================================
+    
 
     else:
 
@@ -819,9 +759,7 @@ def my_datasets(current_user: dict = Depends(get_current_user)):
     return rows
 
 
-# ======================================================
-# MY PREDICTIONS
-# ======================================================
+
 
 @app.get("/my-predictions")
 def my_predictions(current_user: dict = Depends(get_current_user)):
@@ -843,9 +781,7 @@ def api_usage(current_user: dict = Depends(get_current_user)):
     return rows
 
 
-# ======================================================
-# FEATURE ENGINEERING
-# ======================================================
+
 
 @app.post("/feature-engineering/")
 async def feature_engineering(
@@ -903,9 +839,7 @@ async def feature_engineering(
         )
 
 
-# ======================================================
-# TRAIN MODEL
-# ======================================================
+
 
 @app.post("/train-model/")
 async def train_model(
@@ -945,7 +879,7 @@ async def train_model(
 
     filename = file.filename.lower()
 
-    # CSV
+    
     if filename.endswith(".csv"):
 
         if not target_column:
@@ -982,11 +916,11 @@ async def train_model(
             user_dir=user_model_dir
         )
 
-        # Use the actual path that save_model created
+        
         model_path = result.get("optimization", {}).get("saved_as") or f"{user_model_dir}/{model_name}_v1.pkl"
         version = result.get("optimization", {}).get("version", 1)
 
-        # Ensure model file actually exists before inserting to DB
+        
         if not os.path.exists(model_path):
             return {
                 "error": "Model file not found after training",
@@ -1011,7 +945,7 @@ async def train_model(
             "model_path": model_path
         }
 
-    # ZIP
+    
     elif filename.endswith(".zip"):
 
         zip_path = os.path.join(
@@ -1073,7 +1007,7 @@ async def train_model(
             version = result.get("version", 1)
             model_path = result.get("model_saved", f"{user_model_dir}/{model_name}_v{version}.pkl")
 
-            # Ensure model file exists before inserting DB record
+            
             if not os.path.exists(model_path):
                 return {
                     "error": "Model file not found after image_labeled training",
@@ -1107,7 +1041,7 @@ async def train_model(
             version = result.get("version", 1)
             model_path = result.get("model_saved_path", f"{user_model_dir}/{model_name}_v{version}.pkl")
 
-            # Ensure model file exists before inserting DB record
+            
             if not os.path.exists(model_path):
                 return {
                     "error": "Model file not found after image_unlabeled training",
@@ -1142,7 +1076,7 @@ async def train_model(
             version = result.get("version", 1)
             model_path = result.get("model_saved", f"{user_model_dir}/{model_name}_v{version}.pkl")
 
-            # Ensure model file exists before inserting DB record
+            
             if not os.path.exists(model_path):
                 return {
                     "error": "Model file not found after nc4 training",
@@ -1177,9 +1111,7 @@ async def train_model(
         )
 
 
-# ======================================================
-# PREDICT CSV
-# ======================================================
+
 
 class CSVPrediction(BaseModel):
 
@@ -1205,7 +1137,7 @@ async def predict_csv_api(
             detail="Invalid token"
         )
 
-    # Check if user owns this model
+    
     model = get_model_by_name(
         user["id"],
         input.model_name
@@ -1225,9 +1157,7 @@ async def predict_csv_api(
     )
 
 
-# ======================================================
-# PREDICT IMAGE
-# ======================================================
+
 
 @app.post("/predict-image/")
 async def predict_image_api(
@@ -1259,7 +1189,7 @@ async def predict_image_api(
             detail="Invalid token"
         )
 
-    # Check if user owns this model
+  
     model = get_model_by_name(
         user["id"],
         model_name
@@ -1284,9 +1214,7 @@ async def predict_image_api(
     )
 
 
-# ======================================================
-# PREDICT NC4
-# ======================================================
+
 
 @app.post("/predict-nc4/")
 async def predict_nc4_api(
@@ -1318,7 +1246,7 @@ async def predict_nc4_api(
             detail="Invalid token"
         )
 
-    # Check if user owns this model
+   
     model = get_model_by_name(
         user["id"],
         model_name

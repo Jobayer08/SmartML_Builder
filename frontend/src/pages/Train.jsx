@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import API from '../api/api'
 
 export default function Train(){
@@ -8,6 +8,8 @@ export default function Train(){
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState(0)
+  const progressIntervalRef = useRef(null)
 
   const handleTrain = async () => {
     if (!file) { 
@@ -21,22 +23,53 @@ export default function Train(){
 
     setLoading(true)
     setError('')
+    setProgress(0)
+    setResult(null)
+    
     const fd = new FormData()
     fd.append('file', file)
     if (target) fd.append('target_column', target)
     fd.append('model_name', modelName || 'my_model')
     fd.append('token', localStorage.getItem('token'))
 
+    // Simple progress simulation
+    let currentProgress = 0
+    progressIntervalRef.current = setInterval(() => {
+      if (currentProgress < 95) {
+        currentProgress += Math.floor(Math.random() * 5) + 1
+        if (currentProgress > 95) currentProgress = 95
+        setProgress(currentProgress)
+      }
+    }, 500)
+
     try {
+      // Wait for actual API response
       const res = await API.post('/train-model/', fd)
+      
+      // Clear the interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+      }
+      
+      // Set final progress to 100%
+      setProgress(100)
+      
+      // Set the ACTUAL result from API
       setResult(res.data)
       setFile(null)
       setTarget('')
       setModelName('')
+      
     } catch (e) {
+      // Clear interval on error
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+      }
+      
       setError(e.response?.data?.detail || 'Training failed')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -50,7 +83,7 @@ export default function Train(){
       </div>
 
       {/* Training Form Card */}
-      <div className="max-w-2xl">
+      <div className="max-w-4xl">
         <div className="bg-gradient-to-br from-white to-blue-50/50 rounded-xl shadow-md border border-blue-200 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
             <h2 className="text-white font-bold text-lg flex items-center gap-2">
@@ -70,12 +103,13 @@ export default function Train(){
                   onChange={e => setFile(e.target.files[0])} 
                   className="w-full text-sm text-blue-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 transition-all cursor-pointer"
                   accept=".csv,.zip,.nc4"
+                  disabled={loading}
                 />
                 <p className="text-xs text-blue-400 mt-2">
                   Supports CSV, ZIP (images), or NC4 formats
                 </p>
               </div>
-              {file && (
+              {file && !loading && (
                 <div className="mt-3 bg-blue-50 rounded-lg p-2 border border-blue-200">
                   <p className="text-sm text-blue-700 flex items-center gap-2">
                     📎 Selected: {file.name}
@@ -101,6 +135,7 @@ export default function Train(){
                 placeholder="e.g., price, label, class" 
                 value={target} 
                 onChange={e => setTarget(e.target.value)} 
+                disabled={loading}
               />
               <p className="text-xs text-blue-500 mt-1">
                 💡 Leave empty for image/NC4 datasets
@@ -117,6 +152,7 @@ export default function Train(){
                 placeholder="e.g., house_price_model, image_classifier" 
                 value={modelName} 
                 onChange={e => setModelName(e.target.value)} 
+                disabled={loading}
               />
               <p className="text-xs text-blue-500 mt-1">
                 💡 Default: "my_model" if left empty
@@ -124,7 +160,7 @@ export default function Train(){
             </div>
 
             {/* Dataset Type Indicator */}
-            {file && (
+            {file && !loading && (
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <p className="text-sm text-blue-700">
                   <span className="font-semibold">📊 Dataset Type:</span>{' '}
@@ -163,19 +199,57 @@ export default function Train(){
                 '🎯 Train Model'
               )}
             </button>
+
+            {/* Training Progress Visualization - Simple Percentage */}
+            {loading && (
+              <div className="mt-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-blue-200 p-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold text-blue-800">Training in Progress</h3>
+                  <div className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+                    {progress}%
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full bg-blue-200 rounded-full h-6 overflow-hidden shadow-inner">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 h-6 rounded-full transition-all duration-500 ease-in-out relative flex items-center justify-end pr-2"
+                    style={{ width: `${progress}%` }}
+                  >
+                    {progress > 20 && (
+                      <span className="text-white text-xs font-bold">
+                        {progress}%
+                      </span>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                  </div>
+                </div>
+                
+                <div className="mt-3 flex justify-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
+                    <span className="text-sm font-medium text-blue-600 ml-2">
+                      Processing your data...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Training Result */}
-        {result && (
+        {result && !loading && (
           <div className="mt-8 bg-gradient-to-br from-green-50 to-white rounded-xl shadow-md border border-green-200 overflow-hidden">
             <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
               <h2 className="text-white font-bold text-lg flex items-center gap-2">
                 ✅ Training Complete!
               </h2>
             </div>
-            <div className="p-6 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-green-50 p-3 rounded-lg">
                   <p className="text-xs text-green-600 font-semibold">Model Name</p>
                   <p className="text-gray-800 font-medium">{result.model_name}</p>
@@ -183,6 +257,10 @@ export default function Train(){
                 <div className="bg-green-50 p-3 rounded-lg">
                   <p className="text-xs text-green-600 font-semibold">Dataset Type</p>
                   <p className="text-gray-800 font-medium">{result.dataset_type}</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <p className="text-xs text-green-600 font-semibold">Status</p>
+                  <p className="text-green-600 font-medium">✅ Successful</p>
                 </div>
               </div>
               
@@ -194,11 +272,48 @@ export default function Train(){
               )}
               
               {result.training_result?.model_results && (
-                <div className="bg-green-50 p-3 rounded-lg">
-                  <p className="font-semibold text-green-800 mb-2 flex items-center gap-2">
-                    📊 Training Results
-                  </p>
-                  <pre className="bg-white p-3 rounded-lg text-xs overflow-auto max-h-48 border border-green-200">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">📊</span>
+                    <span className="font-semibold text-green-800">Training Results</span>
+                  </div>
+                  
+                  {/* Graph Visualization - Simple bar chart */}
+                  <div className="bg-white p-4 rounded-lg border border-green-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(result.training_result.model_results).map(([key, value]) => {
+                        if (typeof value === 'number') {
+                          const percentage = Math.min(value * 100, 100)
+                          const color = percentage > 80 ? 'green' : percentage > 60 ? 'yellow' : 'red'
+                          return (
+                            <div key={key} className="space-y-1">
+                              <div className="flex justify-between text-sm">
+                                <span className="capitalize font-medium text-gray-600">
+                                  {key.replace(/_/g, ' ')}
+                                </span>
+                                <span className="font-bold text-gray-800">
+                                  {(value * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div 
+                                  className={`h-3 rounded-full transition-all duration-1000 ${
+                                    color === 'green' ? 'bg-gradient-to-r from-green-400 to-green-600' :
+                                    color === 'yellow' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                                    'bg-gradient-to-r from-red-400 to-red-600'
+                                  }`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          )
+                        }
+                        return null
+                      })}
+                    </div>
+                  </div>
+                  
+                  <pre className="bg-white p-4 rounded-lg text-xs overflow-auto max-h-48 border border-green-200 mt-3">
                     {JSON.stringify(result.training_result.model_results, null, 2)}
                   </pre>
                 </div>
@@ -212,6 +327,7 @@ export default function Train(){
                     setFile(null)
                     setTarget('')
                     setModelName('')
+                    setProgress(0)
                   }}
                   className="flex-1 text-sm bg-blue-100 text-blue-600 px-3 py-2 rounded-lg hover:bg-blue-200 transition-all duration-200"
                 >

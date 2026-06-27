@@ -12,7 +12,8 @@ import os
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 
-DB_PORT = os.getenv("DB_PORT")
+##DB_PORT = os.getenv("DB_PORT")
+DB_PORT = os.getenv("DB_PORT", "5432")
 
 if not DB_PORT:
     DB_PORT = "5433" if DB_HOST in ("localhost", "127.0.0.1") else "5432"

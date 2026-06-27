@@ -4,9 +4,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 
 
-# ======================================================
-# CONFIG
-# ======================================================
+
 
 SECRET_KEY = "SMARTML_SECRET_KEY"
 
@@ -15,9 +13,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 
-# ======================================================
-# PASSWORD HASHING
-# ======================================================
+
 
 pwd_context = CryptContext(
     schemes=["pbkdf2_sha256"],
@@ -41,9 +37,7 @@ def verify_password(
     )
 
 
-# ======================================================
-# JWT TOKEN
-# ======================================================
+
 
 def create_access_token(data: dict):
 
@@ -65,9 +59,7 @@ def create_access_token(data: dict):
 
     return encoded_jwt
 
-# ======================================================
-# GET CURRENT USER
-# ======================================================
+
 
 def get_current_user(token: str):
 

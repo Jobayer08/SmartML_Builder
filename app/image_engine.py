@@ -14,9 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# ----------------------------------------
-# CNN Feature Extractor (ResNet18)
-# ----------------------------------------
+
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor()
@@ -41,9 +39,7 @@ def extract_features(img_path):
         return None
 
 
-# ----------------------------------------
-# Detect dataset type
-# ----------------------------------------
+
 def detect_image_dataset_type(dataset_path):
     subfolders = [
         f for f in os.listdir(dataset_path)
@@ -52,16 +48,14 @@ def detect_image_dataset_type(dataset_path):
     return "labeled" if len(subfolders) > 0 else "unlabeled"
 
 
-# ----------------------------------------
-# LABELED IMAGE → CLASSIFICATION
-# ----------------------------------------
+
 def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=None):
 
     X, y, classes = [], [], []
 
-    # Helper: find the folder with labeled image subfolders by recursively searching
+    
     def find_label_folders(start_path, depth=0, max_depth=5):
-        """Recursively find the folder containing labeled image subfolders."""
+        
         if depth > max_depth:
             return None
         
@@ -79,7 +73,7 @@ def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=N
         if not subfolders:
             return None
         
-        # Check if ANY subfolder contains images
+        
         for folder in subfolders:
             try:
                 image_files = [
@@ -87,22 +81,21 @@ def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=N
                     if os.path.isfile(os.path.join(folder, f)) and 
                        f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp'))
                 ]
-                if image_files:  # Found a folder with images!
+                if image_files: 
                     return start_path
             except:
                 pass
         
-        # No image folders found at this level.
-        # Recurse into subfolders
+        
         for folder in subfolders:
             result = find_label_folders(folder, depth + 1, max_depth)
             if result is not None:
                 return result
         
-        # No images found anywhere
+        
         return None
     
-    # Find the actual location of labeled image folders
+    
     search_path = find_label_folders(dataset_path)
     if search_path is None:
         search_path = dataset_path
@@ -133,7 +126,7 @@ def train_labeled_images(dataset_path, model_name="image_classifier", user_dir=N
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        # Use versioning to avoid overwriting and DB conflicts
+        
         model_path, version = get_versioned_model_path(model_name, user_dir=user_dir)
     else:
         model_path, version = get_versioned_model_path(model_name)

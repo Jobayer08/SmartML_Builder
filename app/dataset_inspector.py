@@ -5,9 +5,7 @@ import pandas as pd
 from netCDF4 import Dataset
 
 
-# =====================================================
-# CSV INSPECT
-# =====================================================
+
 
 def _sanitize_value(value):
     if pd.isna(value):
@@ -43,9 +41,7 @@ def inspect_csv(file_path):
     }
 
 
-# =====================================================
-# NC4 INSPECT
-# =====================================================
+
 
 def inspect_nc4(file_path):
 

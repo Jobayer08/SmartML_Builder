@@ -1,4 +1,4 @@
-# app/nc4_engine.py
+
 
 from netCDF4 import Dataset
 import numpy as np
@@ -13,9 +13,7 @@ MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
-# =============================
-# 🔍 STEP 0 — INSPECT FUNCTION
-# =============================
+
 def inspect_nc4(file_path):
 
     ds = Dataset(file_path)
@@ -35,9 +33,7 @@ def inspect_nc4(file_path):
     return info
 
 
-# =============================
-# Check valid numeric variable
-# =============================
+
 def _is_valid_numeric(arr):
     try:
         arr = np.array(arr)
@@ -46,23 +42,19 @@ def _is_valid_numeric(arr):
         return False
 
 
-# =============================
-# Convert NC4 variable → 1D feature
-# =============================
+
 def extract_feature(var_data):
 
     arr = np.array(var_data)
 
-    # multi-dim → mean reduce
+    
     if arr.ndim >= 2:
         return arr.mean(axis=tuple(range(1, arr.ndim)))
 
     return arr
 
 
-# =============================
-# 🧠 SMART TRAIN FUNCTION
-# =============================
+
 def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_dir=None):
 
     ds = Dataset(file_path, "r")
@@ -70,9 +62,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
     variables = list(ds.variables.keys())
     dimensions = list(ds.dimensions.keys())
 
-    # =============================
-    # STEP 1 — AUTO / MANUAL TARGET
-    # =============================
+    
     if target_variable:
 
         if target_variable not in variables:
@@ -85,7 +75,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
         target_var = target_variable
 
     else:
-        # auto pick first numeric
+        
         target_var = None
 
         for v in variables:
@@ -97,9 +87,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
             ds.close()
             return {"error": "No usable variable found"}
 
-    # =============================
-    # STEP 2 — TARGET PREP
-    # =============================
+    
     y_raw = ds.variables[target_var][:]
     y = extract_feature(y_raw)
 
@@ -109,9 +97,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
 
     target_len = len(y)
 
-    # =============================
-    # STEP 3 — FEATURE BUILD
-    # =============================
+    
     X_list = []
     feature_names = []
 
@@ -153,9 +139,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
     y = y[:common_length]
     X = np.vstack([feat[:common_length] for feat in X_list]).T
 
-    # =============================
-    # STEP 5 — TRAIN MODEL
-    # =============================
+    
     model = RandomForestRegressor(n_estimators=100)
     model.fit(X, y)
 
@@ -167,9 +151,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
 
     ds_meta.close()
 
-    # =============================
-    # STEP 7 — SAVE MODEL (🔥 IMPORTANT CHANGE)
-    # =============================
+    
     model_data = {
         "model": model,
         "target": target_var,
@@ -180,7 +162,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        # Use versioning to avoid overwriting and DB conflicts
+        
         model_path, version = get_versioned_model_path(model_name, user_dir=user_dir)
     else:
         model_path, version = get_versioned_model_path(model_name)
@@ -192,9 +174,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
         version=version
     )
 
-    # =============================
-    # STEP 8 — OPTIONAL JSON META
-    # =============================
+    
     meta = {
         "model_name": model_name,
         "target": target_var,
@@ -208,9 +188,7 @@ def analyze_nc4(file_path, target_variable=None, model_name="nc4_model", user_di
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=4)
 
-    # =============================
-    # STEP 9 — RETURN
-    # =============================
+    
     return {
         "dataset_type": "nc4_ml",
         "model_name": model_name,

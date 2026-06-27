@@ -25,7 +25,7 @@ def detect_problem_type(y):
 
 
 
-# Save Model + Metadata
+
 
 def save_model(model, features, target, model_name, preprocessor=None, user_dir=None, accuracy=None):
     """Save model. If preprocessor provided, save dict containing model+preprocessor.
@@ -35,7 +35,7 @@ def save_model(model, features, target, model_name, preprocessor=None, user_dir=
 
     if user_dir:
         os.makedirs(user_dir, exist_ok=True)
-        # user models start with version 1
+        
         version = 1
         model_path = os.path.join(user_dir, f"{model_name}_v{version}.pkl")
     else:
@@ -91,7 +91,7 @@ def optimize_rf_classifier(model, X, y):
 
 
 
-# Train Models (MAIN)
+
 
 def train_models(X_train, X_test, y_train, y_test, features, target, model_name, preprocessor=None, user_dir=None):
 
@@ -130,7 +130,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name,
                 best_model = model
                 best_name = name
 
-        # Optimize RandomForest only
+        
         if best_name == "Random Forest":
             best_model, best_params = optimize_rf_classifier(best_model, X_train, y_train)
         else:
@@ -148,7 +148,7 @@ def train_models(X_train, X_test, y_train, y_test, features, target, model_name,
         best_name = "Linear Regression"
         best_params = {}
 
-    # ========== SAVE ==========
+    
     model_path, version = save_model(
         best_model,
         features,

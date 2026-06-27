@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import text, create_engine
 
-# Database connection
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5433")
 DB_USER = os.getenv("DB_USER", "postgres")
@@ -20,11 +20,9 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚀 SmartML Builder Admin Dashboard")
+st.title("SmartML Builder Admin Dashboard")
 
-# ======================================================
-# TOTAL MODELS
-# ======================================================
+
 
 with engine.connect() as conn:
 
@@ -55,11 +53,9 @@ if top_model:
         f"{top_model[0]} ({top_model[1]})"
     )
 
-# ======================================================
-# PREDICTION TYPE DISTRIBUTION
-# ======================================================
 
-st.subheader("📊 Prediction Type Usage")
+
+st.subheader("Prediction Type Usage")
 
 with engine.connect() as conn:
 
@@ -77,9 +73,7 @@ if rows:
         df.set_index("Type")
     )
 
-# ======================================================
-# MODEL VERSION TABLE
-# ======================================================
+
 
 st.subheader("🧠 Model Versions")
 
@@ -100,9 +94,7 @@ if rows:
 
     st.dataframe(df, use_container_width=True)
 
-# ======================================================
-# PREDICTION LOGS
-# ======================================================
+
 
 st.subheader("📜 Prediction Logs")
 
@@ -132,9 +124,7 @@ if rows:
 
     st.dataframe(df, use_container_width=True)
 
-# ======================================================
-# API USAGE TRACKING
-# ======================================================
+
 
 st.subheader("🌐 API Usage Tracking")
 
